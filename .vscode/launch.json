@@ -1,0 +1,19 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "☕ Run Customer App",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main_customer.dart",
+            "args": ["--flavor", "customer"]
+        },
+        {
+            "name": "👔 Run Cashier App",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main_cashier.dart",
+            "args": ["--flavor", "cashier"]
+        }
+    ]
+}
