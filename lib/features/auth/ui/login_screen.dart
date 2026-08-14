@@ -3,7 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../logic/auth_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/sako_text_field.dart';
-import '../../../shared/widgets/sako_button.dart'; // <-- Tombol baru diimpor
+import '../../../shared/widgets/sako_button.dart';
 
 class LoginScreen extends StatefulWidget {
   final bool isCashierApp; 
@@ -23,11 +23,34 @@ class _LoginScreenState extends State<LoginScreen> {
       _showError('Nomor WhatsApp dan Password wajib diisi.');
       return;
     }
+    
+    // 1. Ubah state tombol menjadi loading
     setState(() => _isLoading = true);
+    
+    // 2. Munculkan overlay loading tambahan agar transisi pindah halaman tidak patah (freeze)
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (c) => const Center(child: CircularProgressIndicator(color: AppColors.primaryOrange)),
+    );
+
+    // 3. Beri jeda sangat singkat agar UI sempat merender animasi secara mulus
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    // 4. Eksekusi proses login ke Supabase
     final errorMsg = await AuthController.login(_phoneController.text.trim(), _passwordController.text);
+    
     if (mounted) {
-      setState(() => _isLoading = false);
-      if (errorMsg != null) _showError(errorMsg);
+      if (errorMsg != null) {
+        // JIKA GAGAL: Tutup dialog loading paksa, matikan state, dan tampilkan error
+        Navigator.pop(context); 
+        setState(() => _isLoading = false);
+        _showError(errorMsg);
+      } else {
+        // JIKA SUKSES: Biarkan dialog loading tetap berputar. 
+        // Sistem Router akan mendeteksi perubahan sesi dan merobohkan seluruh layar ini 
+        // untuk diganti dengan Dashboard secara otomatis dan mulus.
+      }
     }
   }
 
@@ -42,7 +65,6 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        // Kunci layar dan redupkan otomatis saat loading
         child: IgnorePointer(
           ignoring: _isLoading,
           child: AnimatedOpacity(
@@ -125,7 +147,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 12),
 
-                          // Menggunakan tombol pantul baru
                           SakoButton(
                             text: 'Masuk',
                             isLoading: _isLoading,
@@ -163,7 +184,6 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-// Widget transisi animasi untuk tampilan meluncur
 class _FadeSlideTransition extends StatefulWidget {
   final Widget child;
   final int delay;

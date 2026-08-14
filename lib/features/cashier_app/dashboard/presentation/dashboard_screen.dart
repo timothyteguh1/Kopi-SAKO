@@ -1,9 +1,15 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/logic/auth_provider.dart';
 import '../logic/dashboard_provider.dart'; 
+import '../../orders/presentation/pos_customer_screen.dart';
+import '../../orders/presentation/pos_invoice_screen.dart';
+import '../../orders/logic/orders_provider.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -19,11 +25,79 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     return NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0).format(number);
   }
 
-  String formatOrderId(String uuid) {
-    return '#${uuid.substring(0, 6).toUpperCase()}';
+  void _showSettingsModal(BuildContext context) async {
+    // 1. Amankan context dan navigator sebelum proses await dimulai!
+    final currentContext = context;
+    final navigator = Navigator.of(currentContext, rootNavigator: true);
+    final scaffoldMessenger = ScaffoldMessenger.of(currentContext);
+    
+    // Tampilkan Loading
+    showDialog(
+      context: currentContext,
+      barrierDismissible: false,
+      builder: (ctx) => const Center(child: CircularProgressIndicator(color: AppColors.primaryOrange)),
+    );
+
+    try {
+      // Tunggu data dari Supabase
+      final data = await Supabase.instance.client.from('global_settings').select('points_conversion_rate').eq('id', 1).single();
+      
+      // 2. Tutup loading dengan aman
+      navigator.pop();
+
+      if (!mounted) return;
+
+      final rateCtrl = TextEditingController(text: data['points_conversion_rate'].toString());
+
+      // 3. Tampilkan Modal Pengaturan Poin
+      showDialog(
+        context: currentContext,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Pengaturan Poin', style: TextStyle(fontWeight: FontWeight.w900)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('1 Poin didapatkan setiap pembelian kelipatan:', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              const SizedBox(height: 12),
+              TextField(
+                controller: rateCtrl,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  prefixText: 'Rp ',
+                  filled: true,
+                  fillColor: Colors.grey.shade100,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal', style: TextStyle(color: Colors.grey))),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryOrange, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              onPressed: () async {
+                final newRate = int.tryParse(rateCtrl.text);
+                if (newRate != null && newRate > 0) {
+                  Navigator.pop(ctx);
+                  await Supabase.instance.client.from('global_settings').update({'points_conversion_rate': newRate}).eq('id', 1);
+                  scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Kelipatan poin berhasil diperbarui!')));
+                }
+              },
+              child: const Text('Simpan', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      navigator.pop(); // Pastikan loading tertutup jika terjadi error
+      if (mounted) {
+        scaffoldMessenger.showSnackBar(SnackBar(content: Text('Gagal mengambil pengaturan: $e')));
+      }
+    }
   }
 
-  // FUNGSI MEMUNCULKAN BOTTOM SHEET SWITCH BRANCH (Admin)
   void _showBranchSwitcher(BuildContext context, WidgetRef ref) {
     showModalBottomSheet(
       context: context,
@@ -81,48 +155,27 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  // FUNGSI KERTAS/POP-UP POS KASIR (TEMPAT BUAT PESANAN)
-  void _showCreateOrderModal(BuildContext context) {
-    showModalBottomSheet(
+  void _showLogoutConfirmation(BuildContext context) {
+    showDialog(
       context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true, // Agar bisa menyesuaikan tinggi keyboard/konten
-      builder: (context) {
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.75, // Mengambil 75% layar
-          decoration: const BoxDecoration(
-            color: AppColors.surfaceWhite,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Keluar Aplikasi?', style: TextStyle(fontWeight: FontWeight.bold)),
+        content: const Text('Apakah Anda yakin ingin logout dari sistem kasir ini?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Batal', style: TextStyle(color: Colors.grey))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+            onPressed: () async {
+              Navigator.pop(ctx); 
+              showDialog(context: context, barrierDismissible: false, builder: (c) => const Center(child: CircularProgressIndicator(color: AppColors.primaryOrange)));
+              await Future.delayed(const Duration(milliseconds: 300));
+              await Supabase.instance.client.auth.signOut();
+            },
+            child: const Text('Ya, Logout', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40, height: 5, 
-                  decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10))
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text('Buat Pesanan Baru (POS)', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.textDark)),
-              const Text('Pilih produk dari database cabang aktif', style: TextStyle(fontSize: 12, color: Colors.grey)),
-              const Divider(height: 32),
-              
-              // Tempat form produk & keranjang belanja kasir nanti
-              const Expanded(
-                child: Center(
-                  child: Text(
-                    'Form POS Kasir akan dirakit di sini\n(Terhubung ke tabel products & branch_stocks)',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+        ],
+      ),
     );
   }
 
@@ -132,18 +185,57 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
     final salesDataAsync = ref.watch(todaySalesProvider);
     final liveOrdersAsync = ref.watch(liveOrdersProvider);
+    final completedOrdersAsync = ref.watch(completedOrdersProvider); // DATA PESANAN SELESAI
     final branchName = ref.watch(activeBranchNameProvider);
     final userRole = ref.watch(userRoleProvider).value; 
     final isAdmin = userRole == 'super_admin';
+    final currentUserName = Supabase.instance.client.auth.currentUser?.userMetadata?['full_name'] ?? 'Kasir';
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      
+      drawer: Drawer(
+        backgroundColor: AppColors.surfaceWhite,
+        child: Column(
+          children: [
+            UserAccountsDrawerHeader(
+              decoration: const BoxDecoration(color: AppColors.primaryOrange),
+              accountName: Text(currentUserName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              accountEmail: Text(isAdmin ? 'Super Admin' : 'Staf Kasir'),
+              currentAccountPicture: const CircleAvatar(backgroundColor: Colors.white, child: Icon(Icons.person, color: AppColors.primaryOrange, size: 40)),
+            ),
+            if (isAdmin)
+              ListTile(
+                leading: const Icon(Icons.tune, color: AppColors.textDark),
+                title: const Text('Pengaturan Poin', style: TextStyle(fontWeight: FontWeight.bold)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showSettingsModal(context);
+                },
+              ),
+            const Spacer(),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.logout, color: Colors.red),
+              title: const Text('Keluar Aplikasi', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+              onTap: () {
+                Navigator.pop(context);
+                _showLogoutConfirmation(context);
+              },
+            ),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
+      
       appBar: AppBar(
         backgroundColor: AppColors.surfaceWhite,
         elevation: 0,
+        iconTheme: const IconThemeData(color: AppColors.textDark),
         title: GestureDetector(
           onTap: isAdmin ? () => _showBranchSwitcher(context, ref) : null,
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(Icons.location_on, color: AppColors.primaryOrange),
               const SizedBox(width: 8),
@@ -164,9 +256,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ),
       ),
       
-      // TOMBOL MELAYANG POS (HANYA MUNCUL DI BERANDA)
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showCreateOrderModal(context),
+        onPressed: () {
+          ref.read(cartProvider.notifier).clearCart();
+          ref.read(selectedCustomerProvider.notifier).state = null;
+
+          Navigator.of(context, rootNavigator: true).push(
+            MaterialPageRoute(
+              fullscreenDialog: true, 
+              builder: (context) => const PosCustomerScreen(),
+            ),
+          );
+        },
         backgroundColor: AppColors.primaryOrange,
         elevation: 4,
         icon: const Icon(Icons.add_shopping_cart, color: Colors.white),
@@ -176,7 +277,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
       body: CustomScrollView(
         slivers: [
-          // KARTU SALDO
+          // TOTAL PEMASUKAN HARI INI
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
@@ -191,11 +292,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         child: Container(
                           width: double.infinity,
                           padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: AppColors.surfaceWhite,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: isExpanded ? AppColors.primaryOrange : Colors.transparent, width: 1.5),
-                          ),
+                          decoration: BoxDecoration(color: AppColors.surfaceWhite, borderRadius: BorderRadius.circular(20), border: Border.all(color: isExpanded ? AppColors.primaryOrange : Colors.transparent, width: 1.5)),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -207,10 +304,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                 ],
                               ),
                               const SizedBox(height: 8),
-                              Text(
-                                formatRupiah(sales.total), 
-                                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: AppColors.textDark)
-                              ),
+                              Text(formatRupiah(sales.total), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: AppColors.textDark)),
                             ],
                           ),
                         ),
@@ -240,7 +334,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ),
           ),
 
-          // JUDUL ANTREAN
+          // ANTREAN AKTIF (LIVE)
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
@@ -260,42 +354,52 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ),
           ),
 
-          // DAFTAR ANTREAN
           liveOrdersAsync.when(
-            loading: () => const SliverToBoxAdapter(child: SizedBox()),
+            loading: () => const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.all(32.0), child: Center(child: CircularProgressIndicator(color: AppColors.primaryOrange)))),
             error: (err, stack) => SliverToBoxAdapter(child: Center(child: Text('Error: $err'))),
             data: (orders) {
               if (orders.isEmpty) {
-                return SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(32, 32, 32, 80), // Padding bawah ditambah agar tidak tertutup tombol melayang
-                    child: Center(child: Text('Belum ada antrean pesanan di cabang ini.', style: TextStyle(color: Colors.grey.shade500))),
-                  ),
-                );
+                return SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.all(32.0), child: Center(child: Text('Belum ada antrean pesanan di cabang ini.', style: TextStyle(color: Colors.grey.shade500)))));
               }
-
               return SliverList(
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
-                    final order = orders[index];
-                    final orderId = order['id'] as String;
-                    final customerName = order['customer_name_snapshot'] ?? 'Pelanggan';
-                    final totalAmount = order['total_amount'] as int;
-                    final status = order['status'] as String;
-                    
-                    return _buildLiveOrderCard(
-                      orderId: formatOrderId(orderId),
-                      customerName: customerName,
-                      amount: formatRupiah(totalAmount),
-                      status: status,
-                    );
+                    return LiveOrderCard(order: orders[index]);
                   },
                   childCount: orders.length,
                 ),
               );
             },
           ),
-          const SliverPadding(padding: EdgeInsets.only(bottom: 80)), // Ruang kosong untuk tombol melayang
+
+          // PESANAN SELESAI HARI INI
+          const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(16.0, 32.0, 16.0, 8.0),
+              child: Text('Pesanan Selesai (Hari Ini)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.textDark)),
+            ),
+          ),
+
+          completedOrdersAsync.when(
+            loading: () => const SliverToBoxAdapter(child: SizedBox()),
+            error: (err, stack) => SliverToBoxAdapter(child: Center(child: Text('Error: $err'))),
+            data: (orders) {
+              if (orders.isEmpty) {
+                return SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.fromLTRB(32, 16, 32, 80), child: Center(child: Text('Belum ada pesanan yang selesai.', style: TextStyle(color: Colors.grey.shade500)))));
+              }
+              return SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    // Pakai komponen yang sama, tapi karena statusnya bukan 'preparing', otomatis tanpa timer dan berlabel "Selesai"
+                    return LiveOrderCard(order: orders[index]);
+                  },
+                  childCount: orders.length,
+                ),
+              );
+            },
+          ),
+
+          const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
         ],
       ),
     );
@@ -305,11 +409,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceWhite,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.grey.shade200),
-        ),
+        decoration: BoxDecoration(color: AppColors.surfaceWhite, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.shade200)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -323,46 +423,220 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       ),
     );
   }
+}
 
-  Widget _buildLiveOrderCard({required String orderId, required String customerName, required String amount, required String status}) {
-    final isProcessing = status == 'processing';
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceWhite,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(orderId, style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textDark, fontSize: 16)),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: isProcessing ? Colors.blue.shade50 : Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  isProcessing ? 'Diproses' : 'Menunggu Bayar', 
-                  style: TextStyle(color: isProcessing ? Colors.blue : Colors.orange, fontSize: 12, fontWeight: FontWeight.bold)
-                ),
-              ),
-            ],
+// ============================================================================
+// WIDGET KHUSUS: KARTU PESANAN DENGAN AUTO-COMPLETE TIMER & NOTA AMAN
+// ============================================================================
+class LiveOrderCard extends StatefulWidget {
+  final Map<String, dynamic> order;
+  const LiveOrderCard({super.key, required this.order});
+
+  @override
+  State<LiveOrderCard> createState() => _LiveOrderCardState();
+}
+
+class _LiveOrderCardState extends State<LiveOrderCard> {
+  Timer? _timer;
+  late DateTime _targetTime;
+  String _timeRemaining = "--:--";
+  bool _isOverdue = false;
+  bool _isAutoUpdating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Hanya hitung timer jika statusnya masih diproses (preparing)
+    if (widget.order['status'] == 'preparing') {
+      _calculateTargetTime();
+      _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        _updateTime();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _calculateTargetTime() {
+    final createdAt = DateTime.parse(widget.order['created_at']).toLocal();
+    final int prepTimeMinutes = widget.order['estimated_prep_time'] ?? 15;
+    _targetTime = createdAt.add(Duration(minutes: prepTimeMinutes));
+    _updateTime();
+  }
+
+  Future<void> _autoCompleteOrder() async {
+    if (_isAutoUpdating) return;
+    _isAutoUpdating = true;
+    try {
+      await Supabase.instance.client
+          .from('orders')
+          .update({'status': 'completed'})
+          .eq('id', widget.order['id']);
+    } catch (e) {
+      debugPrint('Gagal auto-update status: $e');
+    }
+  }
+
+  void _updateTime() {
+    final now = DateTime.now();
+    final difference = _targetTime.difference(now);
+
+    if (difference.isNegative) {
+      if (!_isOverdue && mounted) {
+        setState(() {
+          _isOverdue = true;
+          _timeRemaining = "Selesai"; 
+        });
+        _autoCompleteOrder();
+      }
+    } else {
+      final minutes = difference.inMinutes.toString().padLeft(2, '0');
+      final seconds = (difference.inSeconds % 60).toString().padLeft(2, '0');
+      if (mounted) {
+        setState(() {
+          _timeRemaining = "$minutes:$seconds";
+          _isOverdue = false;
+        });
+      }
+    }
+  }
+
+ Future<void> _showInvoiceModal() async {
+    // 1. Simpan context ke variabel lokal agar aman
+    final currentContext = context;
+    
+    // Tampilkan Loading
+    showDialog(
+      context: currentContext,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator(color: AppColors.primaryOrange)),
+    );
+
+    try {
+      final orderId = widget.order['id'];
+      final response = await Supabase.instance.client
+          .from('order_items')
+          .select('quantity, price_at_time, products(name)')
+          .eq('order_id', orderId);
+
+      // 2. TUTUP DIALOG LOADING DULUAN (Gunakan rootNavigator = true agar sangat aman)
+      Navigator.of(currentContext, rootNavigator: true).pop();
+
+      // 3. Cek apakah widget masih ada di layar sebelum pindah halaman
+      if (!mounted) return; 
+
+      final cartItems = (response as List<dynamic>).map<Map<String, dynamic>>((item) {
+        final qty = item['quantity'] ?? 0;
+        final price = item['price_at_time'] ?? 0;
+        String productName = 'Produk Tidak Diketahui';
+        if (item['products'] != null) {
+          if (item['products'] is Map) {
+            productName = item['products']['name'] ?? productName;
+          } else if (item['products'] is List && item['products'].isNotEmpty) {
+            productName = item['products'][0]['name'] ?? productName;
+          }
+        }
+        return {'qty': qty, 'price': price, 'name': productName};
+      }).toList();
+
+      // Buka Layar Nota
+      Navigator.push(
+        currentContext,
+        MaterialPageRoute(
+          builder: (context) => PosInvoiceScreen(
+            cartItems: cartItems,
+            total: widget.order['total_amount'] as int,
+            paymentMethod: widget.order['payment_method'] ?? 'cash',
+            customerName: widget.order['customer_name_snapshot'] ?? 'Umum',
           ),
-          const Divider(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(customerName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              Text(amount, style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.primaryOrange)),
-            ],
-          ),
-        ],
+        ),
+      );
+    } catch (e) {
+      // Jika terjadi error (misal internet putus), tutup loading-nya juga
+      Navigator.of(currentContext, rootNavigator: true).pop();
+      if (mounted) {
+        ScaffoldMessenger.of(currentContext).showSnackBar(SnackBar(content: Text('Gagal memuat rincian nota: $e'), backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final String orderId = '#${widget.order['id'].toString().substring(0, 6).toUpperCase()}';
+    final String customerName = widget.order['customer_name_snapshot'] ?? 'Pelanggan';
+    final String amount = NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0).format(widget.order['total_amount'] as int);
+    
+    // Status pengecekan
+    final bool isProcessing = widget.order['status'] == 'preparing';
+    final bool isCompleted = widget.order['status'] == 'completed';
+
+    return GestureDetector(
+      onTap: _showInvoiceModal,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 20), 
+        decoration: BoxDecoration(
+          color: isCompleted ? Colors.grey.shade50 : AppColors.surfaceWhite, // Warna beda jika selesai
+          borderRadius: BorderRadius.circular(20), 
+          border: Border.all(color: Colors.grey.shade200)
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(orderId, style: TextStyle(fontWeight: FontWeight.w900, color: isCompleted ? Colors.grey.shade600 : AppColors.textDark, fontSize: 16)),
+                Row(
+                  children: [
+                    // TIMER (Hanya untuk yang sedang diproses)
+                    if (isProcessing)
+                      Container(
+                        margin: const EdgeInsets.only(right: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(color: _isOverdue ? Colors.green.shade50 : Colors.blue.shade50, borderRadius: BorderRadius.circular(8)),
+                        child: Row(
+                          children: [
+                            Icon(_isOverdue ? Icons.check_circle : Icons.timer_outlined, size: 14, color: _isOverdue ? Colors.green : Colors.blue),
+                            const SizedBox(width: 4),
+                            Text(_timeRemaining, style: TextStyle(color: _isOverdue ? Colors.green : Colors.blue, fontSize: 12, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                    
+                    // LENCANA STATUS (Selesai menggunakan lencana Abu-abu)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), 
+                      decoration: BoxDecoration(
+                        color: isCompleted ? Colors.grey.shade200 : (isProcessing ? Colors.blue.shade50 : Colors.orange.shade50), 
+                        borderRadius: BorderRadius.circular(12)
+                      ), 
+                      child: Text(
+                        isCompleted ? 'Selesai' : (isProcessing ? 'Diproses' : 'Menunggu'), 
+                        style: TextStyle(
+                          color: isCompleted ? Colors.grey.shade600 : (isProcessing ? Colors.blue : Colors.orange), 
+                          fontSize: 12, fontWeight: FontWeight.bold
+                        )
+                      )
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const Divider(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween, 
+              children: [
+                Text(customerName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: isCompleted ? Colors.grey.shade600 : AppColors.textDark)), 
+                Text(amount, style: TextStyle(fontWeight: FontWeight.w900, color: isCompleted ? Colors.grey.shade500 : AppColors.primaryOrange))
+              ]
+            ),
+          ],
+        ),
       ),
     );
   }

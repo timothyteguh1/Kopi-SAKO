@@ -10,31 +10,36 @@ class DailySales {
 class DashboardRepository {
   final SupabaseClient _supabase = Supabase.instance.client;
 
-  // 1. Ambil Penjualan (Hanya untuk Cabang yang Aktif)
-  Future<DailySales> getTodaySales(String branchId) async {
+  // 1. Ambil Penjualan (DIUBAH KE STREAM AGAR LIVE SECARA OTOMATIS)
+  Stream<DailySales> getTodaySalesStream(String branchId) {
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day).toIso8601String();
-    
-    final response = await _supabase
+
+    return _supabase
         .from('orders')
-        .select('total_amount, payment_method, status')
+        .stream(primaryKey: ['id'])
         .eq('branch_id', branchId)
         .gte('created_at', startOfDay)
-        .neq('status', 'waiting_payment'); 
+        .map((events) {
+          int cashTotal = 0;
+          int nonCashTotal = 0;
 
-    int cashTotal = 0;
-    int nonCashTotal = 0;
+          for (var row in events) {
+            final status = row['status'];
+            // Jangan hitung pesanan yang batal atau belum dibayar
+            if (status == 'waiting_payment' || status == 'cancelled') continue; 
 
-    for (var row in response) {
-      final amount = row['total_amount'] as int;
-      final method = row['payment_method'] as String?;
-      if (method == 'cash') {
-        cashTotal += amount;
-      } else if (method == 'qris' || method == 'transfer') {
-        nonCashTotal += amount;
-      }
-    }
-    return DailySales(total: cashTotal + nonCashTotal, cash: cashTotal, nonCash: nonCashTotal);
+            final amount = row['total_amount'] as int;
+            final method = row['payment_method'] as String?;
+
+            if (method == 'cash') {
+              cashTotal += amount;
+            } else if (method == 'qris' || method == 'transfer') {
+              nonCashTotal += amount;
+            }
+          }
+          return DailySales(total: cashTotal + nonCashTotal, cash: cashTotal, nonCash: nonCashTotal);
+        });
   }
 
   // 2. Ambil Antrean LIVE 
@@ -51,7 +56,7 @@ class DashboardRepository {
         .map((events) {
           return events.where((order) {
             final status = order['status'];
-            return status == 'waiting_payment' || status == 'processing';
+            return status == 'waiting_payment' || status == 'preparing';
           }).toList();
         });
   }
@@ -73,5 +78,19 @@ class DashboardRepository {
         .eq('id', userId)
         .maybeSingle();
     return response?['assigned_branch_id'] as String?;
+  }
+
+  // 5. Ambil Daftar Pesanan Selesai Hari Ini
+  Stream<List<Map<String, dynamic>>> getCompletedOrdersStream(String branchId) {
+    final now = DateTime.now();
+    final startOfDay = DateTime(now.year, now.month, now.day).toIso8601String();
+
+    return _supabase
+        .from('orders')
+        .stream(primaryKey: ['id'])
+        .eq('branch_id', branchId)
+        .gte('created_at', startOfDay)
+        .eq('status', 'completed') 
+        .order('created_at', ascending: false); 
   }
 }
