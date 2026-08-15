@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/date_symbol_data_local.dart'; // <-- IMPORT BARU DITAMBAHKAN
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/constants/supabase_keys.dart';
 import 'routes/app_router.dart'; // Panggil AppRouter
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // KUNCI PERBAIKAN: Nyalakan kamus format tanggal bahasa Indonesia
+  await initializeDateFormatting('id_ID', null);
+
   await dotenv.load(fileName: ".env");
 
   await Supabase.initialize(

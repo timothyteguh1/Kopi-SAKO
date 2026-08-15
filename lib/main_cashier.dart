@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/date_symbol_data_local.dart'; // <-- IMPORT BARU DITAMBAHKAN
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/constants/supabase_keys.dart';
@@ -10,6 +11,9 @@ void main() async {
   // 1. Pastikan engine Flutter sudah siap sebelum memanggil plugin eksternal
   WidgetsFlutterBinding.ensureInitialized();
   
+  // KUNCI PERBAIKAN: Nyalakan kamus format tanggal bahasa Indonesia
+  await initializeDateFormatting('id_ID', null);
+
   // 2. Muat file .env yang berisi kunci rahasia
   await dotenv.load(fileName: ".env");
 

@@ -12,7 +12,7 @@ import '../features/cashier_app/dashboard/presentation/main_cashier_scaffold.dar
 import '../features/cashier_app/dashboard/presentation/dashboard_screen.dart';
 import '../features/cashier_app/menu_management/presentation/management_screen.dart';
 import '../features/cashier_app/reports/presentation/reports_screen.dart';
-
+import '../features/cashier_app/orders/presentation/orders_history_screen.dart';
 // Global Key untuk masing-masing router
 final _rootNavigatorCustomer = GlobalKey<NavigatorState>();
 final _rootNavigatorCashier = GlobalKey<NavigatorState>();
@@ -110,7 +110,7 @@ class AppRouter {
               routes: [
                 GoRoute(
                   path: '/cashier/orders',
-                  builder: (context, state) => const Scaffold(body: Center(child: Text('Riwayat Pesanan'))), // Nanti kita buat file terpisah
+                  builder: (context, state) => const OrdersHistoryScreen(),
                 ),
               ],
             ),
