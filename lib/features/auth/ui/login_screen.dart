@@ -4,9 +4,10 @@ import '../logic/auth_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/sako_text_field.dart';
 import '../../../shared/widgets/sako_button.dart';
+import '../../../shared/utils/pop_up_helper.dart'; // IMPORT POP-UP GLOBAL
 
 class LoginScreen extends StatefulWidget {
-  final bool isCashierApp; 
+  final bool isCashierApp;
   const LoginScreen({super.key, this.isCashierApp = false});
 
   @override
@@ -14,7 +15,7 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _phoneController = TextEditingController(); 
+  final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
 
@@ -23,40 +24,40 @@ class _LoginScreenState extends State<LoginScreen> {
       _showError('Nomor WhatsApp dan Password wajib diisi.');
       return;
     }
-    
-    // 1. Ubah state tombol menjadi loading
+
     setState(() => _isLoading = true);
-    
-    // 2. Munculkan overlay loading tambahan agar transisi pindah halaman tidak patah (freeze)
+
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (c) => const Center(child: CircularProgressIndicator(color: AppColors.primaryOrange)),
+      builder: (c) => const Center(
+        child: CircularProgressIndicator(color: AppColors.primaryOrange),
+      ),
     );
 
-    // 3. Beri jeda sangat singkat agar UI sempat merender animasi secara mulus
     await Future.delayed(const Duration(milliseconds: 300));
 
-    // 4. Eksekusi proses login ke Supabase
-    final errorMsg = await AuthController.login(_phoneController.text.trim(), _passwordController.text);
-    
+    final errorMsg = await AuthController.login(
+      _phoneController.text.trim(),
+      _passwordController.text,
+    );
+
     if (mounted) {
       if (errorMsg != null) {
-        // JIKA GAGAL: Tutup dialog loading paksa, matikan state, dan tampilkan error
-        Navigator.pop(context); 
+        Navigator.pop(context);
         setState(() => _isLoading = false);
         _showError(errorMsg);
-      } else {
-        // JIKA SUKSES: Biarkan dialog loading tetap berputar. 
-        // Sistem Router akan mendeteksi perubahan sesi dan merobohkan seluruh layar ini 
-        // untuk diganti dengan Dashboard secara otomatis dan mulus.
       }
     }
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: AppColors.error, behavior: SnackBarBehavior.floating),
+    // MENGGUNAKAN POP-UP SAKO
+    showSakoPopUp(
+      context,
+      title: 'Gagal Masuk',
+      message: message,
+      isError: true,
     );
   }
 
@@ -71,23 +72,31 @@ class _LoginScreenState extends State<LoginScreen> {
             duration: const Duration(milliseconds: 300),
             opacity: _isLoading ? 0.6 : 1.0,
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24.0,
+                vertical: 32.0,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 12),
-                  
+
                   _FadeSlideTransition(
                     delay: 0,
                     child: Hero(
                       tag: 'sako_logo',
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(16), 
-                        child: Image.asset('assets/images/logo_sako.png', height: 64, width: 64, fit: BoxFit.cover),
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.asset(
+                          'assets/images/logo_sako.png',
+                          height: 64,
+                          width: 64,
+                          fit: BoxFit.cover,
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 24), 
+                  const SizedBox(height: 24),
 
                   _FadeSlideTransition(
                     delay: 100,
@@ -95,7 +104,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
                             border: Border.all(color: Colors.black12),
                             borderRadius: BorderRadius.circular(20),
@@ -103,21 +115,47 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(widget.isCashierApp ? Icons.admin_panel_settings_outlined : Icons.person_outline, color: AppColors.primaryOrange, size: 16),
+                              Icon(
+                                widget.isCashierApp
+                                    ? Icons.admin_panel_settings_outlined
+                                    : Icons.person_outline,
+                                color: AppColors.primaryOrange,
+                                size: 16,
+                              ),
                               const SizedBox(width: 6),
-                              Text(widget.isCashierApp ? 'STAF INTERNAL' : 'PELANGGAN SAKO', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textLight)),
+                              Text(
+                                widget.isCashierApp
+                                    ? 'STAF INTERNAL'
+                                    : 'PELANGGAN SAKO',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textLight,
+                                ),
+                              ),
                             ],
                           ),
                         ),
                         const SizedBox(height: 24),
                         Text(
                           widget.isCashierApp ? 'SAKO\nCashier' : 'Kopi\nSAKO',
-                          style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w900, color: AppColors.textDark, height: 1.0, letterSpacing: -1.5),
+                          style: const TextStyle(
+                            fontSize: 48,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.textDark,
+                            height: 1.0,
+                            letterSpacing: -1.5,
+                          ),
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          widget.isCashierApp ? 'Masuk untuk mulai mengelola transaksi kasir hari ini.' : 'Masuk dan pesan kopi segar langsung ke lokasimu.',
-                          style: const TextStyle(fontSize: 16, color: AppColors.textLight),
+                          widget.isCashierApp
+                              ? 'Masuk untuk mulai mengelola transaksi kasir hari ini.'
+                              : 'Masuk dan pesan kopi segar langsung ke lokasimu.',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            color: AppColors.textLight,
+                          ),
                         ),
                       ],
                     ),
@@ -131,19 +169,46 @@ class _LoginScreenState extends State<LoginScreen> {
                       decoration: BoxDecoration(
                         color: AppColors.surfaceWhite,
                         borderRadius: BorderRadius.circular(32),
-                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 20, offset: const Offset(0, 10))],
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.03),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          SakoTextField(controller: _phoneController, label: 'Nomor WhatsApp', hint: '081234567890', prefixIcon: Icons.phone_android_outlined, keyboardType: TextInputType.phone),
+                          SakoTextField(
+                            controller: _phoneController,
+                            label: 'Nomor WhatsApp',
+                            hint: '081234567890',
+                            prefixIcon: Icons.phone_android_outlined,
+                            keyboardType: TextInputType.phone,
+                          ),
                           const SizedBox(height: 20),
-                          SakoTextField(controller: _passwordController, label: 'Password', hint: '••••••••', prefixIcon: Icons.lock_outline, isPassword: true),
+                          SakoTextField(
+                            controller: _passwordController,
+                            label: 'Password',
+                            hint: '••••••••',
+                            prefixIcon: Icons.lock_outline,
+                            isPassword: true,
+                          ),
                           const SizedBox(height: 12),
-                          
+
                           Align(
                             alignment: Alignment.centerRight,
-                            child: TextButton(onPressed: () {}, child: const Text('Lupa password?', style: TextStyle(color: AppColors.textLight, fontWeight: FontWeight.bold))),
+                            child: TextButton(
+                              onPressed: () {},
+                              child: const Text(
+                                'Lupa password?',
+                                style: TextStyle(
+                                  color: AppColors.textLight,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
                           ),
                           const SizedBox(height: 12),
 
@@ -156,9 +221,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
-                  
+
                   const SizedBox(height: 40),
-                  
+
                   _FadeSlideTransition(
                     delay: 300,
                     child: Center(
@@ -166,8 +231,22 @@ class _LoginScreenState extends State<LoginScreen> {
                         onTap: () => context.push('/register'),
                         child: RichText(
                           text: TextSpan(
-                            text: 'Belum punya akun? ', style: const TextStyle(color: AppColors.textLight, fontSize: 15),
-                            children: [TextSpan(text: widget.isCashierApp ? 'Ajukan pendaftaran' : 'Daftar sekarang', style: const TextStyle(color: AppColors.primaryOrange, fontWeight: FontWeight.bold))],
+                            text: 'Belum punya akun? ',
+                            style: const TextStyle(
+                              color: AppColors.textLight,
+                              fontSize: 15,
+                            ),
+                            children: [
+                              TextSpan(
+                                text: widget.isCashierApp
+                                    ? 'Ajukan pendaftaran'
+                                    : 'Daftar sekarang',
+                                style: const TextStyle(
+                                  color: AppColors.primaryOrange,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -194,7 +273,8 @@ class _FadeSlideTransition extends StatefulWidget {
   State<_FadeSlideTransition> createState() => _FadeSlideTransitionState();
 }
 
-class _FadeSlideTransitionState extends State<_FadeSlideTransition> with SingleTickerProviderStateMixin {
+class _FadeSlideTransitionState extends State<_FadeSlideTransition>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
@@ -202,9 +282,18 @@ class _FadeSlideTransitionState extends State<_FadeSlideTransition> with SingleT
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
-    _slideAnimation = Tween<Offset>(begin: const Offset(0, 0.2), end: Offset.zero).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.2),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
     Future.delayed(Duration(milliseconds: widget.delay), () {
       if (mounted) _controller.forward();
     });
@@ -218,6 +307,9 @@ class _FadeSlideTransitionState extends State<_FadeSlideTransition> with SingleT
 
   @override
   Widget build(BuildContext context) {
-    return FadeTransition(opacity: _fadeAnimation, child: SlideTransition(position: _slideAnimation, child: widget.child));
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: SlideTransition(position: _slideAnimation, child: widget.child),
+    );
   }
 }

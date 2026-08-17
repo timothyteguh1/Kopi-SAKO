@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kopi_sako/features/cashier_app/menu_management/stock/presentation/stock_screen.dart';
+// IMPORT BARU UNTUK LAYAR PEMBELIAN
+import '../../purchases/presentation/purchases_screen.dart'; 
+
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/logic/auth_provider.dart';
 
@@ -48,7 +51,6 @@ class ManagementScreen extends ConsumerWidget {
                 ? 'Kelola semua stok dan harga jual'
                 : 'Lihat sisa stok di cabang ini',
             icon: Icons.inventory_2_outlined,
-            // Pada bagian _buildMenuCard untuk STOK
             onTap: () {
               Navigator.push(
                 context,
@@ -64,7 +66,11 @@ class ManagementScreen extends ConsumerWidget {
             subtitle: 'Input pengeluaran belanja cabang',
             icon: Icons.receipt_long_outlined,
             onTap: () {
-              // TODO: Navigasi ke halaman Pembelian / Pengeluaran
+              // KUNCI PERBAIKAN: Buka layar Riwayat Pembelian
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const PurchasesScreen()),
+              );
             },
           ),
 

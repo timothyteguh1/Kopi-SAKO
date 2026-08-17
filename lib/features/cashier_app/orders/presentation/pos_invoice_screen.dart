@@ -8,7 +8,6 @@ class PosInvoiceScreen extends StatefulWidget {
   final String paymentMethod;
   final String customerName;
 
-  // 3 VARIABEL BARU UNTUK FITUR HAPUS:
   final String? orderId;
   final bool isAdmin;
   final VoidCallback? onOrderDeleted;
@@ -38,9 +37,7 @@ class _PosInvoiceScreenState extends State<PosInvoiceScreen> {
     _calculatePoints();
   }
 
-  // FUNGSI PINTAR: Menghitung poin otomatis berdasarkan pengaturan terbaru di Supabase
   Future<void> _calculatePoints() async {
-    // Jika pelanggan umum (Walk-in), tidak dapat poin. Langsung hentikan loading.
     final isWalkIn = widget.customerName.toLowerCase().contains('umum');
     if (isWalkIn) {
       if (mounted) {
@@ -53,7 +50,6 @@ class _PosInvoiceScreenState extends State<PosInvoiceScreen> {
     }
 
     try {
-      // Ambil kelipatan poin dari tabel global_settings
       final data = await Supabase.instance.client
           .from('global_settings')
           .select('points_conversion_rate')
@@ -64,9 +60,7 @@ class _PosInvoiceScreenState extends State<PosInvoiceScreen> {
 
       if (mounted) {
         setState(() {
-          _earnedPoints =
-              widget.total ~/
-              rate; // Pembagian bulat (contoh: 180.000 / 10.000 = 18 poin)
+          _earnedPoints = widget.total ~/ rate;
           _isFetchingPoints = false;
         });
       }
@@ -75,11 +69,69 @@ class _PosInvoiceScreenState extends State<PosInvoiceScreen> {
     }
   }
 
+  // FUNGSI HELPER: Pop-Up Notifikasi Tengah
+  void _showPopUp(
+    BuildContext context,
+    String title,
+    String message, {
+    bool isError = false,
+  }) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(
+              isError ? Icons.error_outline : Icons.check_circle_outline,
+              color: isError ? Colors.red : Colors.green,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  color: isError ? Colors.red : Colors.green,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          message,
+          style: const TextStyle(color: Color(0xFF4A3B32), fontSize: 14),
+        ),
+        actions: [
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFE65C00), // Warna Oranye SAKO
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text(
+                'Mengerti',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _executeAdminDelete() async {
     final currentContext = context;
-    final navigator = Navigator.of(currentContext, rootNavigator: true);
 
-    // Tampilkan konfirmasi pelindung ganda
     final bool? confirm = await showDialog<bool>(
       context: currentContext,
       builder: (ctx) => AlertDialog(
@@ -126,37 +178,73 @@ class _PosInvoiceScreenState extends State<PosInvoiceScreen> {
     );
 
     try {
-      // PERINTAH HAPUS SAKTI (Memanggil Repository)
-      // Pastikan Anda mengimpor dashboard_repository.dart atau jalankan fungsinya dari Supabase langsung
       await Supabase.instance.client
           .from('orders')
           .delete()
           .eq('id', widget.orderId!);
 
-      navigator.pop(); // Tutup loading
+      if (!mounted) return;
+      Navigator.of(currentContext, rootNavigator: true).pop(); // Tutup loading
 
-      if (mounted) {
-        ScaffoldMessenger.of(currentContext).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Transaksi terhapus. Stok & Poin telah disesuaikan otomatis.',
-            ),
-            backgroundColor: Colors.green,
+      // Munculkan Pop-up Berhasil
+      await showDialog(
+        context: currentContext,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
           ),
-        );
+          title: const Row(
+            children: [
+              Icon(Icons.check_circle_outline, color: Colors.green),
+              SizedBox(width: 8),
+              Text(
+                'Berhasil',
+                style: TextStyle(
+                  color: Colors.green,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          content: const Text(
+            'Transaksi terhapus. Stok & Poin telah disesuaikan otomatis.',
+            style: TextStyle(color: Color(0xFF4A3B32)),
+          ),
+          actions: [
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFE65C00),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text(
+                  'Mengerti',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
 
+      // Tutup layar invoice HANYA SETELAH admin menekan tombol mengerti
+      if (mounted) {
         if (widget.onOrderDeleted != null) widget.onOrderDeleted!();
-        Navigator.of(currentContext).pop(); // Tutup layar invoice
+        Navigator.of(currentContext).pop();
       }
     } catch (e) {
-      navigator.pop();
-      if (mounted)
-        ScaffoldMessenger.of(currentContext).showSnackBar(
-          SnackBar(
-            content: Text('Gagal menghapus: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+      if (!mounted) return;
+      Navigator.of(currentContext, rootNavigator: true).pop(); // Tutup loading
+      _showPopUp(currentContext, 'Gagal', 'Gagal menghapus: $e', isError: true);
     }
   }
 
@@ -186,12 +274,10 @@ class _PosInvoiceScreenState extends State<PosInvoiceScreen> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 500),
             child: SingleChildScrollView(
-              // Ditambahkan agar aman jika struk sangat panjang
               padding: const EdgeInsets.symmetric(vertical: 24),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // 1. IKON SUKSES
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
@@ -219,7 +305,6 @@ class _PosInvoiceScreenState extends State<PosInvoiceScreen> {
                     style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
                   ),
 
-                  // 2. LENCANA POIN REWARD (Tampil menawan dengan animasi)
                   if (!_isFetchingPoints && _earnedPoints > 0)
                     TweenAnimationBuilder<double>(
                       tween: Tween(begin: 0.0, end: 1.0),
@@ -282,7 +367,6 @@ class _PosInvoiceScreenState extends State<PosInvoiceScreen> {
 
                   const SizedBox(height: 32),
 
-                  // 3. KARTU NOTA (STRUK KERTAS)
                   Container(
                     margin: const EdgeInsets.symmetric(horizontal: 24),
                     padding: const EdgeInsets.all(24),
@@ -335,7 +419,6 @@ class _PosInvoiceScreenState extends State<PosInvoiceScreen> {
                           child: Divider(color: colorDivider, thickness: 1.5),
                         ),
 
-                        // DAFTAR ITEM DI NOTA
                         ...widget.cartItems.map(
                           (item) => Padding(
                             padding: const EdgeInsets.only(bottom: 12),
@@ -400,26 +483,43 @@ class _PosInvoiceScreenState extends State<PosInvoiceScreen> {
                   ),
                   const SizedBox(height: 40),
 
-                  // 4. TOMBOL NAVIGASI
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: Column(
                       children: [
-                        // Baris Pertama: Tombol Cetak & Ke Beranda
                         Row(
                           children: [
                             Expanded(
                               child: OutlinedButton.icon(
                                 style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(vertical: 16),
-                                  side: const BorderSide(color: colorDivider, width: 1.5),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 16,
+                                  ),
+                                  side: const BorderSide(
+                                    color: colorDivider,
+                                    width: 1.5,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
                                 ),
-                                icon: const Icon(Icons.print, color: colorTextBrown),
-                                label: const Text('Cetak Struk', style: TextStyle(color: colorTextBrown, fontWeight: FontWeight.bold)),
+                                icon: const Icon(
+                                  Icons.print,
+                                  color: colorTextBrown,
+                                ),
+                                label: const Text(
+                                  'Cetak Struk',
+                                  style: TextStyle(
+                                    color: colorTextBrown,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                                 onPressed: () {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Fitur cetak printer bluetooth sedang dikembangkan')),
+                                  _showPopUp(
+                                    context,
+                                    'Informasi',
+                                    'Fitur cetak printer bluetooth sedang dikembangkan.',
+                                    isError: false,
                                   );
                                 },
                               ),
@@ -429,21 +529,35 @@ class _PosInvoiceScreenState extends State<PosInvoiceScreen> {
                               child: ElevatedButton.icon(
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: colorJagoGreen,
-                                  padding: const EdgeInsets.symmetric(vertical: 16),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 16,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
                                   elevation: 0,
                                 ),
-                                icon: const Icon(Icons.home, color: Colors.white),
-                                label: const Text('Ke Beranda', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                icon: const Icon(
+                                  Icons.home,
+                                  color: Colors.white,
+                                ),
+                                label: const Text(
+                                  'Ke Beranda',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                                 onPressed: () {
-                                  Navigator.of(context).popUntil((route) => route.isFirst);
+                                  Navigator.of(
+                                    context,
+                                  ).popUntil((route) => route.isFirst);
                                 },
                               ),
                             ),
                           ],
                         ),
-                        
-                        // Baris Kedua (Di luar Row): Tombol Hapus Khusus Admin
+
                         if (widget.isAdmin && widget.orderId != null)
                           Padding(
                             padding: const EdgeInsets.only(top: 16),
@@ -451,12 +565,25 @@ class _PosInvoiceScreenState extends State<PosInvoiceScreen> {
                               width: double.infinity,
                               child: TextButton.icon(
                                 style: TextButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 16,
+                                  ),
                                   backgroundColor: Colors.red.shade50,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
                                 ),
-                                icon: const Icon(Icons.delete_forever, color: Colors.red),
-                                label: const Text('Hapus Transaksi (Admin)', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                                icon: const Icon(
+                                  Icons.delete_forever,
+                                  color: Colors.red,
+                                ),
+                                label: const Text(
+                                  'Hapus Transaksi (Admin)',
+                                  style: TextStyle(
+                                    color: Colors.red,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                                 onPressed: _executeAdminDelete,
                               ),
                             ),

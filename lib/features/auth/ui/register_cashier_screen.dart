@@ -4,6 +4,7 @@ import '../logic/auth_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/sako_text_field.dart';
 import '../../../shared/widgets/sako_button.dart';
+import '../../../shared/utils/pop_up_helper.dart'; // IMPORT POP-UP GLOBAL
 
 class RegisterCashierScreen extends StatefulWidget {
   const RegisterCashierScreen({super.key});
@@ -37,14 +38,16 @@ class _RegisterCashierScreenState extends State<RegisterCashierScreen> {
       if (errorMsg != null) {
         _showError(errorMsg);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Akun Kasir diajukan! Menunggu admin.'), backgroundColor: AppColors.primaryOrange));
-        context.pop();
+        // MENGGUNAKAN POP-UP SAKO UNTUK SUKSES
+        await showSakoPopUp(context, title: 'Berhasil', message: 'Akun Kasir diajukan! Menunggu admin menyetujui.', isError: false);
+        if (mounted) context.pop(); // Kembali ke halaman sebelumnya setelah tombol Mengerti ditekan
       }
     }
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: AppColors.error, behavior: SnackBarBehavior.floating));
+    // MENGGUNAKAN POP-UP SAKO
+    showSakoPopUp(context, title: 'Pendaftaran Gagal', message: message, isError: true);
   }
 
   @override
@@ -92,7 +95,7 @@ class _RegisterCashierScreenState extends State<RegisterCashierScreen> {
                         SakoButton(
                           text: 'Ajukan Akses',
                           isLoading: _isLoading,
-                          backgroundColor: AppColors.textDark, // Warna hitam khusus kasir
+                          backgroundColor: AppColors.textDark, 
                           onPressed: _handleRegister,
                         ),
                       ],

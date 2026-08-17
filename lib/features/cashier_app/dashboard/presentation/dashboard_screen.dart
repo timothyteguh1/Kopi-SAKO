@@ -32,7 +32,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   void _showSettingsModal(BuildContext context) async {
     final currentContext = context;
     final navigator = Navigator.of(currentContext, rootNavigator: true);
-    final scaffoldMessenger = ScaffoldMessenger.of(currentContext);
 
     showDialog(
       context: currentContext,
@@ -110,11 +109,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       .from('global_settings')
                       .update({'points_conversion_rate': newRate})
                       .eq('id', 1);
-                  scaffoldMessenger.showSnackBar(
-                    const SnackBar(
-                      content: Text('Kelipatan poin berhasil diperbarui!'),
-                    ),
-                  );
+                  if (mounted)
+                    _showPopUpMessage(
+                      currentContext,
+                      'Berhasil',
+                      'Kelipatan poin berhasil diperbarui!',
+                      isError: false,
+                    );
                 }
               },
               child: const Text(
@@ -130,11 +131,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       );
     } catch (e) {
       navigator.pop();
-      if (mounted) {
-        scaffoldMessenger.showSnackBar(
-          SnackBar(content: Text('Gagal mengambil pengaturan: $e')),
+      if (mounted)
+        _showPopUpMessage(
+          currentContext,
+          'Gagal',
+          'Gagal mengambil pengaturan: $e',
+          isError: true,
         );
-      }
     }
   }
 
@@ -297,7 +300,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-
       drawer: Drawer(
         backgroundColor: AppColors.surfaceWhite,
         child: Column(
@@ -353,7 +355,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           ],
         ),
       ),
-
       appBar: AppBar(
         backgroundColor: AppColors.surfaceWhite,
         elevation: 0,
@@ -395,12 +396,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           ),
         ),
       ),
-
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
           ref.read(cartProvider.notifier).clearCart();
           ref.read(selectedCustomerProvider.notifier).state = null;
-
           Navigator.of(context, rootNavigator: true).push(
             MaterialPageRoute(
               fullscreenDialog: true,
@@ -417,7 +416,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-
       body: initBranchAsync.isLoading
           ? const Center(
               child: CircularProgressIndicator(color: AppColors.primaryOrange),
@@ -431,7 +429,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             )
           : CustomScrollView(
               slivers: [
-                // TOTAL PEMASUKAN HARI INI
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
@@ -529,8 +526,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ),
                   ),
                 ),
-
-                // ANTREAN AKTIF (LIVE)
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
@@ -572,7 +567,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ),
                   ),
                 ),
-
                 liveOrdersAsync.when(
                   loading: () => const SliverToBoxAdapter(
                     child: Padding(
@@ -588,7 +582,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     child: Center(child: Text('Error: $err')),
                   ),
                   data: (orders) {
-                    if (orders.isEmpty) {
+                    if (orders.isEmpty)
                       return SliverToBoxAdapter(
                         child: Padding(
                           padding: const EdgeInsets.all(32.0),
@@ -600,16 +594,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           ),
                         ),
                       );
-                    }
                     return SliverList(
                       delegate: SliverChildBuilderDelegate((context, index) {
-                        return LiveOrderCard(order: orders[index], isAdmin: isAdmin); // Akses dikirim ke Card
+                        return LiveOrderCard(
+                          order: orders[index],
+                          isAdmin: isAdmin,
+                        );
                       }, childCount: orders.length),
                     );
                   },
                 ),
-
-                // PESANAN SELESAI HARI INI
                 const SliverToBoxAdapter(
                   child: Padding(
                     padding: EdgeInsets.fromLTRB(16.0, 32.0, 16.0, 8.0),
@@ -623,14 +617,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ),
                   ),
                 ),
-
                 completedOrdersAsync.when(
                   loading: () => const SliverToBoxAdapter(child: SizedBox()),
                   error: (err, stack) => SliverToBoxAdapter(
                     child: Center(child: Text('Error: $err')),
                   ),
                   data: (orders) {
-                    if (orders.isEmpty) {
+                    if (orders.isEmpty)
                       return SliverToBoxAdapter(
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(32, 16, 32, 80),
@@ -642,15 +635,16 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           ),
                         ),
                       );
-                    }
                     return SliverList(
                       delegate: SliverChildBuilderDelegate((context, index) {
-                        return LiveOrderCard(order: orders[index], isAdmin: isAdmin); // Akses dikirim ke Card
+                        return LiveOrderCard(
+                          order: orders[index],
+                          isAdmin: isAdmin,
+                        );
                       }, childCount: orders.length),
                     );
                   },
                 ),
-
                 const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
               ],
             ),
@@ -695,14 +689,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 }
 
-// ============================================================================
-// WIDGET KHUSUS: KARTU PESANAN DENGAN AUTO-COMPLETE TIMER & NOTA AMAN
-// ============================================================================
 class LiveOrderCard extends StatefulWidget {
   final Map<String, dynamic> order;
-  final bool isAdmin; 
+  final bool isAdmin;
 
-  const LiveOrderCard({super.key, required this.order, this.isAdmin = false}); 
+  const LiveOrderCard({super.key, required this.order, this.isAdmin = false});
 
   @override
   State<LiveOrderCard> createState() => _LiveOrderCardState();
@@ -720,9 +711,10 @@ class _LiveOrderCardState extends State<LiveOrderCard> {
     super.initState();
     if (widget.order['status'] == 'preparing') {
       _calculateTargetTime();
-      _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-        _updateTime();
-      });
+      _timer = Timer.periodic(
+        const Duration(seconds: 1),
+        (timer) => _updateTime(),
+      );
     }
   }
 
@@ -767,21 +759,22 @@ class _LiveOrderCardState extends State<LiveOrderCard> {
     } else {
       final minutes = difference.inMinutes.toString().padLeft(2, '0');
       final seconds = (difference.inSeconds % 60).toString().padLeft(2, '0');
-      if (mounted) {
+      if (mounted)
         setState(() {
           _timeRemaining = "$minutes:$seconds";
           _isOverdue = false;
         });
-      }
     }
   }
 
   Future<void> _showInvoiceModal() async {
-    // Tampilkan Loading
+    final currentContext = context;
     showDialog(
-      context: context,
+      context: currentContext,
       barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator(color: AppColors.primaryOrange)),
+      builder: (_) => const Center(
+        child: CircularProgressIndicator(color: AppColors.primaryOrange),
+      ),
     );
 
     try {
@@ -791,43 +784,45 @@ class _LiveOrderCardState extends State<LiveOrderCard> {
           .select('quantity, price_at_time, products(name)')
           .eq('order_id', orderId);
 
-      // Pastikan layar masih ada sebelum menutup dialog loading
       if (!mounted) return;
-      Navigator.of(context, rootNavigator: true).pop();
+      Navigator.of(currentContext, rootNavigator: true).pop();
 
-      final cartItems = (response as List<dynamic>).map<Map<String, dynamic>>((item) {
+      final cartItems = (response as List<dynamic>).map<Map<String, dynamic>>((
+        item,
+      ) {
         final qty = item['quantity'] ?? 0;
         final price = item['price_at_time'] ?? 0;
         String productName = 'Produk Tidak Diketahui';
         if (item['products'] != null) {
-          if (item['products'] is Map) {
+          if (item['products'] is Map)
             productName = item['products']['name'] ?? productName;
-          } else if (item['products'] is List && item['products'].isNotEmpty) {
+          else if (item['products'] is List && item['products'].isNotEmpty)
             productName = item['products'][0]['name'] ?? productName;
-          }
         }
         return {'qty': qty, 'price': price, 'name': productName};
       }).toList();
 
-      // Pastikan layar masih ada sebelum berpindah ke halaman Nota
       if (!mounted) return;
-      Navigator.of(context, rootNavigator: true).push(
+      Navigator.of(currentContext, rootNavigator: true).push(
         MaterialPageRoute(
           builder: (context) => PosInvoiceScreen(
             cartItems: cartItems,
             total: widget.order['total_amount'] as int,
             paymentMethod: widget.order['payment_method'] ?? 'cash',
             customerName: widget.order['customer_name_snapshot'] ?? 'Umum',
-            orderId: orderId, 
-            isAdmin: widget.isAdmin, 
+            orderId: orderId,
+            isAdmin: widget.isAdmin,
           ),
         ),
       );
     } catch (e) {
       if (!mounted) return;
-      Navigator.of(context, rootNavigator: true).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal memuat rincian nota: $e'), backgroundColor: Colors.red),
+      Navigator.of(currentContext, rootNavigator: true).pop();
+      _showPopUpMessage(
+        currentContext,
+        'Gagal',
+        'Gagal memuat rincian nota: $e',
+        isError: true,
       );
     }
   }
@@ -909,7 +904,6 @@ class _LiveOrderCardState extends State<LiveOrderCard> {
                           ],
                         ),
                       ),
-
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 10,
@@ -970,4 +964,64 @@ class _LiveOrderCardState extends State<LiveOrderCard> {
       ),
     );
   }
+}
+
+// FUNGSI HELPER: Pop-Up Notifikasi Tengah (Diletakkan di luar class agar bisa dipakai global)
+void _showPopUpMessage(
+  BuildContext context,
+  String title,
+  String message, {
+  bool isError = false,
+}) {
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Row(
+        children: [
+          Icon(
+            isError ? Icons.error_outline : Icons.check_circle_outline,
+            color: isError ? Colors.red : Colors.green,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              title,
+              style: TextStyle(
+                color: isError ? Colors.red : Colors.green,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
+          ),
+        ],
+      ),
+      content: Text(
+        message,
+        style: const TextStyle(color: AppColors.textDark, fontSize: 14),
+      ),
+      actions: [
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryOrange,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              'Mengerti',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }

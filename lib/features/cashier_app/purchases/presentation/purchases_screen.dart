@@ -5,34 +5,37 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/logic/auth_provider.dart';
-import '../logic/orders_history_provider.dart';
-import 'pos_invoice_screen.dart'; 
+import '../../../../shared/utils/pop_up_helper.dart';
+import '../logic/purchases_provider.dart';
+import 'purchase_invoice_screen.dart';
+import 'add_purchase_screen.dart'; // Import layar tambah pengeluaran
 
-class OrdersHistoryScreen extends ConsumerStatefulWidget {
-  const OrdersHistoryScreen({super.key});
+class PurchasesScreen extends ConsumerStatefulWidget {
+  const PurchasesScreen({super.key});
 
   @override
-  ConsumerState<OrdersHistoryScreen> createState() => _OrdersHistoryScreenState();
+  ConsumerState<PurchasesScreen> createState() => _PurchasesScreenState();
 }
 
-class _OrdersHistoryScreenState extends ConsumerState<OrdersHistoryScreen> {
+class _PurchasesScreenState extends ConsumerState<PurchasesScreen> {
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    // Kembalikan teks pencarian dari state agar UI sinkron jika balik ke tab ini
+    // Sinkronisasi teks pencarian jika kembali dari tab/layar lain
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final currentSearch = ref.read(ordersHistoryProvider).searchQuery;
+      final currentSearch = ref.read(purchasesProvider).searchQuery;
       if (currentSearch.isNotEmpty) {
         _searchController.text = currentSearch;
       }
     });
 
+    // Sensor scroll untuk memuat data tambahan (Infinite Scroll)
     _scrollController.addListener(() {
       if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
-        ref.read(ordersHistoryProvider.notifier).loadMore();
+        ref.read(purchasesProvider.notifier).loadMore();
       }
     });
   }
@@ -44,7 +47,7 @@ class _OrdersHistoryScreenState extends ConsumerState<OrdersHistoryScreen> {
     super.dispose();
   }
 
-  Future<void> _pickDateRange(BuildContext context, OrdersHistoryState state) async {
+  Future<void> _pickDateRange(BuildContext context, PurchasesState state) async {
     final DateTimeRange? picked = await showDateRangePicker(
       context: context,
       initialDateRange: DateTimeRange(start: state.startDate, end: state.endDate),
@@ -66,80 +69,59 @@ class _OrdersHistoryScreenState extends ConsumerState<OrdersHistoryScreen> {
     );
 
     if (picked != null) {
-      ref.read(ordersHistoryProvider.notifier).onDateRangeChanged(picked.start, picked.end);
+      ref.read(purchasesProvider.notifier).onDateRangeChanged(picked.start, picked.end);
     }
   }
 
-  Future<void> _openInvoice(Map<String, dynamic> order, bool isAdmin) async {
+  Future<void> _openInvoice(Map<String, dynamic> purchase, bool isAdmin) async {
     final currentContext = context;
-    showDialog(context: currentContext, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator(color: AppColors.primaryOrange)));
+    showDialog(
+      context: currentContext, 
+      barrierDismissible: false, 
+      builder: (_) => const Center(child: CircularProgressIndicator(color: AppColors.primaryOrange))
+    );
 
     try {
-      final response = await Supabase.instance.client.from('order_items').select('quantity, price_at_time, products(name)').eq('order_id', order['id']);
+      // Ambil rincian barang dari tabel purchase_items
+      final response = await Supabase.instance.client
+          .from('purchase_items')
+          .select('quantity, cost_per_unit, products(name)')
+          .eq('purchase_id', purchase['id']);
+          
       if (!mounted) return;
-      Navigator.of(currentContext, rootNavigator: true).pop();
+      Navigator.of(currentContext, rootNavigator: true).pop(); // Tutup loading
 
-      final cartItems = (response as List<dynamic>).map<Map<String, dynamic>>((item) {
+      final items = (response as List<dynamic>).map<Map<String, dynamic>>((item) {
         String productName = 'Produk Tidak Diketahui';
         if (item['products'] != null) {
           if (item['products'] is Map) productName = item['products']['name'] ?? productName;
-          else if (item['products'] is List && item['products'].isNotEmpty) productName = item['products'][0]['name'] ?? productName;
         }
-        return {'qty': item['quantity'] ?? 0, 'price': item['price_at_time'] ?? 0, 'name': productName};
+        return {'qty': item['quantity'] ?? 0, 'price': item['cost_per_unit'] ?? 0, 'name': productName};
       }).toList();
 
+      if (!mounted) return;
       Navigator.of(currentContext, rootNavigator: true).push(
         MaterialPageRoute(
-          builder: (context) => PosInvoiceScreen(
-            cartItems: cartItems,
-            total: order['total_amount'] as int,
-            paymentMethod: order['payment_method'] ?? 'cash',
-            customerName: order['customer_name_snapshot'] ?? 'Umum',
-            orderId: order['id'], 
+          builder: (context) => PurchaseInvoiceScreen(
+            items: items,
+            total: purchase['total_amount'] as int,
+            supplierName: purchase['supplier_name'] ?? 'Toko/Supplier',
+            purchaseId: purchase['id'], 
             isAdmin: isAdmin,
-            onOrderDeleted: () => ref.read(ordersHistoryProvider.notifier).refreshAfterDelete(),
+            onDeleted: () => ref.read(purchasesProvider.notifier).refreshAfterDelete(),
           ),
         ),
       );
     } catch (e) {
       if (!mounted) return;
       Navigator.of(currentContext, rootNavigator: true).pop(); // Tutup loading
-      
-      // PERBAIKAN: Ganti SnackBar dengan Pop-up Dialog
-      showDialog(
-        context: currentContext,
-        builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Row(
-            children: [
-              Icon(Icons.error_outline, color: Colors.red),
-              SizedBox(width: 8),
-              Expanded(child: Text('Gagal', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 18))),
-            ],
-          ),
-          content: Text('Gagal memuat rincian nota: $e', style: const TextStyle(color: AppColors.textDark, fontSize: 14)),
-          actions: [
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryOrange,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Mengerti', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-              ),
-            ),
-          ],
-        ),
-      );
+      showSakoPopUp(currentContext, title: 'Gagal Membuka Nota', message: e.toString(), isError: true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(ordersHistoryProvider);
+    final state = ref.watch(purchasesProvider);
     final userRole = ref.watch(userRoleProvider).value; 
     final isAdmin = userRole == 'super_admin';
 
@@ -151,7 +133,11 @@ class _OrdersHistoryScreenState extends ConsumerState<OrdersHistoryScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.surfaceWhite,
         elevation: 0,
-        title: const Text('Riwayat Pesanan', style: TextStyle(color: AppColors.textDark, fontWeight: FontWeight.w900)),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: AppColors.textDark),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text('Riwayat Pembelian', style: TextStyle(color: AppColors.textDark, fontWeight: FontWeight.w900)),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(80),
           child: Padding(
@@ -161,12 +147,12 @@ class _OrdersHistoryScreenState extends ConsumerState<OrdersHistoryScreen> {
                 Expanded(
                   child: TextField(
                     controller: _searchController,
-                    onChanged: (val) => ref.read(ordersHistoryProvider.notifier).onSearchChanged(val),
+                    onChanged: (val) => ref.read(purchasesProvider.notifier).onSearchChanged(val),
                     decoration: InputDecoration(
-                      hintText: 'Cari Nota / Pelanggan...',
+                      hintText: 'Cari Nama Supplier...',
                       hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                       prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                      // PERBAIKAN: Lingkaran loading muncul di dalam bar pencarian
+                      // Tampilkan spinner cerdas saat mencari
                       suffixIcon: state.isSearching
                           ? const Padding(padding: EdgeInsets.all(14.0), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryOrange)))
                           : null,
@@ -207,40 +193,57 @@ class _OrdersHistoryScreenState extends ConsumerState<OrdersHistoryScreen> {
           ),
         ),
       ),
-      // PERBAIKAN TAMPILAN BODY
-      body: state.isInitialLoad && state.orders.isEmpty
-          ? _buildSkeletonLoading() // Hanya tampilkan skeleton saat muat awal (ganti cabang/tanggal)
-          : state.orders.isEmpty
-              ? Center(child: Text(state.searchQuery.isEmpty ? 'Tidak ada pesanan di tanggal ini.' : 'Tidak ada pesanan ditemukan.', style: TextStyle(color: Colors.grey.shade500)))
+      
+      // TOMBOL MENGAMBANG: CATAT PENGELUARAN
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const AddPurchaseScreen()),
+          );
+        },
+        backgroundColor: AppColors.textDark, // Warna hitam elegan
+        icon: const Icon(Icons.add_shopping_cart, color: Colors.white),
+        label: const Text('Catat Belanja', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+      ),
+
+      // TAMPILAN KONTEN UTAMA
+      body: state.isInitialLoad && state.purchases.isEmpty
+          ? _buildSkeletonLoading() // Tampilkan skeleton saat muat awal (belum ada data)
+          : state.purchases.isEmpty
+              ? Center(child: Text(state.searchQuery.isEmpty ? 'Tidak ada pengeluaran di tanggal ini.' : 'Tidak ada supplier ditemukan.', style: TextStyle(color: Colors.grey.shade500)))
               : ListView.builder(
                   controller: _scrollController,
-                  padding: const EdgeInsets.all(16),
-                  itemCount: state.orders.length + (state.hasMore ? 1 : 0),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 100), // Padding bawah dilebihkan agar tidak tertutup tombol mengambang
+                  itemCount: state.purchases.length + (state.hasMore ? 1 : 0),
                   itemBuilder: (context, index) {
-                    if (index == state.orders.length) {
+                    // Indikator loading tambahan di bawah saat scroll mentok
+                    if (index == state.purchases.length) {
                       return const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Center(child: CircularProgressIndicator(color: AppColors.primaryOrange)));
                     }
 
-                    final order = state.orders[index];
-                    final DateTime currentOrderDate = DateTime.parse(order['created_at']).toLocal();
+                    final purchase = state.purchases[index];
+                    final DateTime currentPurchaseDate = DateTime.parse(purchase['created_at']).toLocal();
                     
+                    // Logika pengelompokan hari
                     bool showDateHeader = false;
                     if (index == 0) {
                       showDateHeader = true; 
                     } else {
-                      final previousOrder = state.orders[index - 1];
-                      final DateTime previousOrderDate = DateTime.parse(previousOrder['created_at']).toLocal();
+                      final previousPurchase = state.purchases[index - 1];
+                      final DateTime previousPurchaseDate = DateTime.parse(previousPurchase['created_at']).toLocal();
                       
-                      if (currentOrderDate.day != previousOrderDate.day || currentOrderDate.month != previousOrderDate.month || currentOrderDate.year != previousOrderDate.year) {
+                      if (currentPurchaseDate.day != previousPurchaseDate.day || currentPurchaseDate.month != previousPurchaseDate.month || currentPurchaseDate.year != previousPurchaseDate.year) {
                         showDateHeader = true;
                       }
                     }
 
-                    final Widget orderCard = _buildOrderCard(order, isAdmin);
+                    final Widget purchaseCard = _buildPurchaseCard(purchase, isAdmin);
 
+                    // Menyisipkan header tanggal di antara daftar kartu
                     if (showDateHeader) {
-                      String formattedDateHeader = DateFormat('EEEE, dd MMMM yyyy', 'id').format(currentOrderDate);
-                      if (currentOrderDate.day == DateTime.now().day && currentOrderDate.month == DateTime.now().month && currentOrderDate.year == DateTime.now().year) {
+                      String formattedDateHeader = DateFormat('EEEE, dd MMMM yyyy', 'id').format(currentPurchaseDate);
+                      if (currentPurchaseDate.day == DateTime.now().day && currentPurchaseDate.month == DateTime.now().month && currentPurchaseDate.year == DateTime.now().year) {
                         formattedDateHeader = "Hari Ini";
                       }
                       
@@ -260,45 +263,45 @@ class _OrdersHistoryScreenState extends ConsumerState<OrdersHistoryScreen> {
                               ],
                             ),
                           ),
-                          orderCard,
+                          purchaseCard,
                         ],
                       );
                     }
 
-                    return orderCard;
+                    return purchaseCard;
                   },
                 ),
     );
   }
 
-  Widget _buildOrderCard(Map<String, dynamic> order, bool isAdmin) {
-    final String orderId = '#${order['id'].toString().substring(0, 6).toUpperCase()}';
-    final String time = DateFormat('HH:mm').format(DateTime.parse(order['created_at']).toLocal()); 
-    final String customerName = order['customer_name_snapshot'] ?? 'Pelanggan Umum';
-    final String amount = NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0).format(order['total_amount'] as int);
-    
-    Color statusColor = Colors.grey;
-    String statusText = 'Unknown';
-    if (order['status'] == 'completed') { statusColor = Colors.green; statusText = 'Selesai'; } 
-    else if (order['status'] == 'preparing') { statusColor = Colors.blue; statusText = 'Diproses'; }
+  // Desain Kartu Riwayat Pembelian (Aksen Merah)
+  Widget _buildPurchaseCard(Map<String, dynamic> purchase, bool isAdmin) {
+    final String purchaseId = '#${purchase['id'].toString().substring(0, 6).toUpperCase()}';
+    final String time = DateFormat('HH:mm').format(DateTime.parse(purchase['created_at']).toLocal()); 
+    final String supplierName = purchase['supplier_name'] ?? 'Supplier';
+    final String amount = NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0).format(purchase['total_amount'] as int);
 
     return GestureDetector(
-      onTap: () => _openInvoice(order, isAdmin),
+      onTap: () => _openInvoice(purchase, isAdmin),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: AppColors.surfaceWhite, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.shade200)),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceWhite, 
+          borderRadius: BorderRadius.circular(16), 
+          border: Border.all(color: Colors.grey.shade200)
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(orderId, style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textDark, fontSize: 16)),
+                Text(purchaseId, style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.textDark, fontSize: 16)),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), 
-                  decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(12)), 
-                  child: Text(statusText, style: TextStyle(color: statusColor, fontSize: 12, fontWeight: FontWeight.bold))
+                  decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), borderRadius: BorderRadius.circular(12)), 
+                  child: const Text('Keluar', style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.bold))
                 ),
               ],
             ),
@@ -308,8 +311,8 @@ class _OrdersHistoryScreenState extends ConsumerState<OrdersHistoryScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween, 
               children: [
-                Text(customerName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)), 
-                Text(amount, style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.primaryOrange))
+                Text(supplierName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)), 
+                Text('- $amount', style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.red))
               ]
             ),
           ],
@@ -355,6 +358,10 @@ class _OrdersHistoryScreenState extends ConsumerState<OrdersHistoryScreen> {
   }
 
   Widget _shimmerBox({required double width, required double height, double radius = 4}) {
-    return Container(width: width, height: height, decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(radius)));
+    return Container(
+      width: width, 
+      height: height, 
+      decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(radius))
+    );
   }
 }
