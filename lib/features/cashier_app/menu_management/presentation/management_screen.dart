@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:kopi_sako/features/cashier_app/menu_management/stock/presentation/stock_screen.dart';
-// IMPORT BARU UNTUK LAYAR PEMBELIAN
-import '../../purchases/presentation/purchases_screen.dart'; 
+import 'package:go_router/go_router.dart'; // IMPORT GO_ROUTER
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/logic/auth_provider.dart';
@@ -12,7 +10,6 @@ class ManagementScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // 1. Tarik status role pengguna secara live
     final userRole = ref.watch(userRoleProvider).value;
     final isAdmin = userRole == 'super_admin';
 
@@ -43,7 +40,7 @@ class ManagementScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
 
-          // MENU 1: STOK (Semua bisa lihat, Admin bisa CRUD)
+          // MENU 1: STOK
           _buildMenuCard(
             context,
             title: 'Stok Bahan & Menu',
@@ -52,29 +49,38 @@ class ManagementScreen extends ConsumerWidget {
                 : 'Lihat sisa stok di cabang ini',
             icon: Icons.inventory_2_outlined,
             onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const StockScreen()),
-              );
+              // KUNCI PERBAIKAN: Gunakan context.go()
+              context.go('/cashier/management/stock');
             },
           ),
 
-          // MENU 2: PEMBELIAN (Semua bisa akses & input)
+          // MENU 2: PEMBELIAN
           _buildMenuCard(
             context,
             title: 'Catat Pembelian',
             subtitle: 'Input pengeluaran belanja cabang',
             icon: Icons.receipt_long_outlined,
             onTap: () {
-              // KUNCI PERBAIKAN: Buka layar Riwayat Pembelian
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const PurchasesScreen()),
-              );
+              // KUNCI PERBAIKAN: Gunakan context.go()
+              context.go('/cashier/management/purchases');
             },
           ),
 
-          // MENU 3: REWARD / PROMO (Semua bisa lihat, Admin bisa CRUD)
+          // MENU 3: KELOLA PELANGGAN
+          _buildMenuCard(
+            context,
+            title: 'Daftar Pelanggan',
+            subtitle: isAdmin
+                ? 'Kelola poin, edit nama, reset sandi, & hapus'
+                : 'Lihat daftar pelanggan & sisa poin',
+            icon: Icons.group_outlined,
+            onTap: () {
+              // KUNCI PERBAIKAN: Gunakan context.go()
+              context.go('/cashier/management/customers');
+            },
+          ),
+
+          // MENU 4: REWARD / PROMO
           _buildMenuCard(
             context,
             title: 'Reward & Promo',
@@ -83,7 +89,7 @@ class ManagementScreen extends ConsumerWidget {
                 : 'Lihat daftar promo aktif',
             icon: Icons.card_giftcard_outlined,
             onTap: () {
-              // TODO: Navigasi ke halaman Reward
+              // TODO: context.go('/cashier/management/promo');
             },
           ),
 
@@ -100,26 +106,22 @@ class ManagementScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 12),
 
-            // MENU 4: KELOLA KASIR (Hanya Admin)
+            // MENU 5: KELOLA KASIR
             _buildMenuCard(
               context,
               title: 'Kelola Kasir',
               subtitle: 'Tugaskan kasir ke cabang tertentu',
               icon: Icons.people_outline,
-              onTap: () {
-                // TODO: Navigasi ke halaman Kelola Kasir
-              },
+              onTap: () {},
             ),
 
-            // MENU 5: KELOLA CABANG (Hanya Admin)
+            // MENU 6: KELOLA CABANG
             _buildMenuCard(
               context,
               title: 'Kelola Cabang',
               subtitle: 'Tambah, edit, atau tutup cabang',
               icon: Icons.storefront_outlined,
-              onTap: () {
-                // TODO: Navigasi ke halaman Kelola Cabang
-              },
+              onTap: () {},
             ),
           ],
         ],
@@ -127,7 +129,6 @@ class ManagementScreen extends ConsumerWidget {
     );
   }
 
-  // WIDGET KARTU MENU (Desain Modern)
   Widget _buildMenuCard(
     BuildContext context, {
     required String title,

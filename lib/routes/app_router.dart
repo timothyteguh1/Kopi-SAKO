@@ -13,6 +13,12 @@ import '../features/cashier_app/dashboard/presentation/dashboard_screen.dart';
 import '../features/cashier_app/menu_management/presentation/management_screen.dart';
 import '../features/cashier_app/reports/presentation/reports_screen.dart';
 import '../features/cashier_app/orders/presentation/orders_history_screen.dart';
+
+// --- IMPORT BARU UNTUK SUB-MENU KELOLA ---
+import '../features/cashier_app/menu_management/stock/presentation/stock_screen.dart';
+import '../features/cashier_app/purchases/presentation/purchases_screen.dart';
+import '../features/cashier_app/menu_management/customers/presentation/customer_list_screen.dart';
+
 // Global Key untuk masing-masing router
 final _rootNavigatorCustomer = GlobalKey<NavigatorState>();
 final _rootNavigatorCashier = GlobalKey<NavigatorState>();
@@ -61,7 +67,7 @@ class AppRouter {
     
     return GoRouter(
       navigatorKey: _rootNavigatorCashier,
-      initialLocation: '/cashier/dashboard', // Diarahkan langsung ke Dashboard baru
+      initialLocation: '/cashier/dashboard',
       redirect: (context, state) {
         final isLoggedIn = authState != null;
         final isGoingToLogin = state.matchedLocation == '/login';
@@ -70,7 +76,6 @@ class AppRouter {
         if (!isLoggedIn && !isGoingToLogin && !isGoingToRegister) return '/login';
         
         if (isLoggedIn) {
-          // Validasi ketat: Tendang keluar jika Customer mencoba masuk app Kasir
           if (userRole != null && userRole != 'cashier' && userRole != 'super_admin') {
             AuthController.logout();
             return '/login';
@@ -95,32 +100,48 @@ class AppRouter {
             return MainCashierScaffold(navigationShell: navigationShell);
           },
           branches: [
-            // TAB 1: Beranda (Live)
+            // TAB 1: Beranda
             StatefulShellBranch(
               routes: [
                 GoRoute(
                   path: '/cashier/dashboard',
-                  builder: (context, state) => const DashboardScreen(),
+                  // KUNCI PERBAIKAN: Gunakan pageBuilder & NoTransitionPage
+                  pageBuilder: (context, state) => const NoTransitionPage(child: DashboardScreen()),
                 ),
               ],
             ),
             
-            // TAB 2: Pesanan (Riwayat & Search)
+            // TAB 2: Pesanan
             StatefulShellBranch(
               routes: [
                 GoRoute(
                   path: '/cashier/orders',
-                  builder: (context, state) => const OrdersHistoryScreen(),
+                  pageBuilder: (context, state) => const NoTransitionPage(child: OrdersHistoryScreen()),
                 ),
               ],
             ),
             
-            // TAB 3: Kelola
+            // TAB 3: Kelola (Menu Utama Tanpa Animasi, Sub-menu Tetap Default)
             StatefulShellBranch(
               routes: [
                 GoRoute(
                   path: '/cashier/management',
-                  builder: (context, state) => const ManagementScreen(),
+                  pageBuilder: (context, state) => const NoTransitionPage(child: ManagementScreen()),
+                  routes: [
+                    // Catatan: Sub-menu tetap pakai 'builder' agar saat masuk tetap ada animasi geser yang mulus
+                    GoRoute(
+                      path: 'stock', 
+                      builder: (context, state) => const StockScreen(),
+                    ),
+                    GoRoute(
+                      path: 'purchases', 
+                      builder: (context, state) => const PurchasesScreen(),
+                    ),
+                    GoRoute(
+                      path: 'customers', 
+                      builder: (context, state) => const CustomerListScreen(),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -130,7 +151,7 @@ class AppRouter {
               routes: [
                 GoRoute(
                   path: '/cashier/reports',
-                  builder: (context, state) => const ReportsScreen(),
+                  pageBuilder: (context, state) => const NoTransitionPage(child: ReportsScreen()),
                 ),
               ],
             ),

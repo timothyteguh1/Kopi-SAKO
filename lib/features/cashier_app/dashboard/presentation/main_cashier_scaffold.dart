@@ -8,11 +8,13 @@ class MainCashierScaffold extends StatelessWidget {
   const MainCashierScaffold({super.key, required this.navigationShell});
 
   void _onTap(int index) {
-    navigationShell.goBranch(
-      index,
-      initialLocation: index == navigationShell.currentIndex,
-    );
-  }
+  // initialLocation: true akan memaksa tab untuk mereset riwayatnya
+  // dan kembali ke halaman paling awal di tab tersebut.
+  navigationShell.goBranch(
+    index,
+    initialLocation: true, 
+  );
+}
 
   @override
   Widget build(BuildContext context) {

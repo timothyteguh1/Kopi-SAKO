@@ -22,7 +22,6 @@ class _OrdersHistoryScreenState extends ConsumerState<OrdersHistoryScreen> {
   @override
   void initState() {
     super.initState();
-    // Kembalikan teks pencarian dari state agar UI sinkron jika balik ke tab ini
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final currentSearch = ref.read(ordersHistoryProvider).searchQuery;
       if (currentSearch.isNotEmpty) {
@@ -105,7 +104,6 @@ class _OrdersHistoryScreenState extends ConsumerState<OrdersHistoryScreen> {
       if (!mounted) return;
       Navigator.of(currentContext, rootNavigator: true).pop(); // Tutup loading
       
-      // PERBAIKAN: Ganti SnackBar dengan Pop-up Dialog
       showDialog(
         context: currentContext,
         builder: (ctx) => AlertDialog(
@@ -166,7 +164,6 @@ class _OrdersHistoryScreenState extends ConsumerState<OrdersHistoryScreen> {
                       hintText: 'Cari Nota / Pelanggan...',
                       hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                       prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                      // PERBAIKAN: Lingkaran loading muncul di dalam bar pencarian
                       suffixIcon: state.isSearching
                           ? const Padding(padding: EdgeInsets.all(14.0), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryOrange)))
                           : null,
@@ -207,72 +204,82 @@ class _OrdersHistoryScreenState extends ConsumerState<OrdersHistoryScreen> {
           ),
         ),
       ),
-      // PERBAIKAN TAMPILAN BODY
       body: state.isInitialLoad && state.orders.isEmpty
-          ? _buildSkeletonLoading() // Hanya tampilkan skeleton saat muat awal (ganti cabang/tanggal)
+          ? _buildSkeletonLoading() 
           : state.orders.isEmpty
               ? Center(child: Text(state.searchQuery.isEmpty ? 'Tidak ada pesanan di tanggal ini.' : 'Tidak ada pesanan ditemukan.', style: TextStyle(color: Colors.grey.shade500)))
-              : ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(16),
-                  itemCount: state.orders.length + (state.hasMore ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    if (index == state.orders.length) {
-                      return const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Center(child: CircularProgressIndicator(color: AppColors.primaryOrange)));
-                    }
-
-                    final order = state.orders[index];
-                    final DateTime currentOrderDate = DateTime.parse(order['created_at']).toLocal();
-                    
-                    bool showDateHeader = false;
-                    if (index == 0) {
-                      showDateHeader = true; 
-                    } else {
-                      final previousOrder = state.orders[index - 1];
-                      final DateTime previousOrderDate = DateTime.parse(previousOrder['created_at']).toLocal();
-                      
-                      if (currentOrderDate.day != previousOrderDate.day || currentOrderDate.month != previousOrderDate.month || currentOrderDate.year != previousOrderDate.year) {
-                        showDateHeader = true;
-                      }
-                    }
-
-                    final Widget orderCard = _buildOrderCard(order, isAdmin);
-
-                    if (showDateHeader) {
-                      String formattedDateHeader = DateFormat('EEEE, dd MMMM yyyy', 'id').format(currentOrderDate);
-                      if (currentOrderDate.day == DateTime.now().day && currentOrderDate.month == DateTime.now().month && currentOrderDate.year == DateTime.now().year) {
-                        formattedDateHeader = "Hari Ini";
-                      }
-                      
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.only(top: 24, bottom: 12, left: 8),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.history_toggle_off, color: Colors.grey, size: 18),
-                                const SizedBox(width: 8),
-                                Text(
-                                  formattedDateHeader, 
-                                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: AppColors.textDark)
-                                ),
-                              ],
-                            ),
-                          ),
-                          orderCard,
-                        ],
-                      );
-                    }
-
-                    return orderCard;
+              // PERBAIKAN: RefreshIndicator untuk loading saat drag ke bawah
+              : RefreshIndicator(
+                  color: AppColors.primaryOrange,
+                  onRefresh: () async {
+                    await ref.read(ordersHistoryProvider.notifier).refreshManual();
                   },
+                  child: ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(), // Pastikan list selalu bisa di-scroll agar RefreshIndicator menyala
+                      controller: _scrollController,
+                      padding: const EdgeInsets.all(16),
+                      itemCount: state.orders.length + (state.hasMore ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        if (index == state.orders.length) {
+                          return const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Center(child: CircularProgressIndicator(color: AppColors.primaryOrange)));
+                        }
+
+                        final order = state.orders[index];
+                        final DateTime currentOrderDate = DateTime.parse(order['created_at']).toLocal();
+                        
+                        bool showDateHeader = false;
+                        if (index == 0) {
+                          showDateHeader = true; 
+                        } else {
+                          final previousOrder = state.orders[index - 1];
+                          final DateTime previousOrderDate = DateTime.parse(previousOrder['created_at']).toLocal();
+                          
+                          if (currentOrderDate.day != previousOrderDate.day || currentOrderDate.month != previousOrderDate.month || currentOrderDate.year != previousOrderDate.year) {
+                            showDateHeader = true;
+                          }
+                        }
+
+                        final Widget orderCard = _buildOrderCard(order, isAdmin);
+
+                        if (showDateHeader) {
+                          String formattedDateHeader = DateFormat('EEEE, dd MMMM yyyy', 'id').format(currentOrderDate);
+                          if (currentOrderDate.day == DateTime.now().day && currentOrderDate.month == DateTime.now().month && currentOrderDate.year == DateTime.now().year) {
+                            formattedDateHeader = "Hari Ini";
+                          }
+                          
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(top: 24, bottom: 12, left: 8),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.history_toggle_off, color: Colors.grey, size: 18),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      formattedDateHeader, 
+                                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: AppColors.textDark)
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              orderCard,
+                            ],
+                          );
+                        }
+
+                        return orderCard;
+                      },
+                    ),
                 ),
     );
   }
 
   Widget _buildOrderCard(Map<String, dynamic> order, bool isAdmin) {
-    final String orderId = '#${order['id'].toString().substring(0, 6).toUpperCase()}';
+    // KUNCI PENCARIAN NOTA: Menampilkan short_id jika ada, jika tidak fallback ke potongan ID panjang
+    final String rawShortId = order['short_id'] ?? order['id'].toString().substring(0, 6);
+    final String orderId = '#${rawShortId.toUpperCase()}';
+    
     final String time = DateFormat('HH:mm').format(DateTime.parse(order['created_at']).toLocal()); 
     final String customerName = order['customer_name_snapshot'] ?? 'Pelanggan Umum';
     final String amount = NumberFormat.currency(locale: 'id', symbol: 'Rp ', decimalDigits: 0).format(order['total_amount'] as int);

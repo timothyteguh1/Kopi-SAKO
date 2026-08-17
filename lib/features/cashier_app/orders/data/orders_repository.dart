@@ -15,13 +15,11 @@ class OrdersRepository {
     }).toList();
   }
 
-  // Cari fungsi registerNewCustomer dan GANTI dengan yang ini:
   Future<Map<String, dynamic>> registerNewCustomer(String name, String phone) async {
     try {
       final newUserId = await _supabase.rpc('register_customer_by_cashier', params: {
         'p_full_name': name, 'p_phone_number': phone,
       });
-      // Mengembalikan wujud data pelanggan untuk langsung dipakai (tanpa perlu search lagi)
       return {
         'id': newUserId,
         'full_name': name,
@@ -82,7 +80,6 @@ class OrdersRepository {
     return order; 
   }
 
-  // Tambahkan fungsi ini di dalam class OrdersRepository:
   Future<void> processPayment({
     required String? customerId,
     required String branchId,
@@ -94,7 +91,6 @@ class OrdersRepository {
     try {
       final String cashierId = _supabase.auth.currentUser!.id;
 
-      // Format keranjang menjadi JSON agar bisa dibaca Supabase RPC
       final List<Map<String, dynamic>> itemsPayload = cartItems.map((item) {
         return {
           'product_id': item['id'],
@@ -103,13 +99,12 @@ class OrdersRepository {
         };
       }).toList();
 
-      // Panggil fungsi "Sapu Jagat" di Supabase
       await _supabase.rpc('process_pos_transaction', params: {
         'p_customer_id': customerId,
         'p_branch_id': branchId,
         'p_cashier_id': cashierId,
         'p_total_amount': totalAmount,
-        'p_payment_method': paymentMethod, // 'cash', 'qris', atau 'transfer'
+        'p_payment_method': paymentMethod,
         'p_estimated_prep_time': estimatedTime,
         'p_items': itemsPayload,
       });
@@ -117,5 +112,30 @@ class OrdersRepository {
     } catch (e) {
       throw Exception('Gagal memproses pembayaran: $e');
     }
+  }
+
+  // =====================================================================
+  // FUNGSI BARU: Tarik Riwayat Pesanan dengan Pencarian Resi/Nama (short_id)
+  // =====================================================================
+  Future<List<Map<String, dynamic>>> getOrdersHistory({
+    String query = '', 
+    required String branchId,
+  }) async {
+    var queryBuilder = _supabase.from('orders').select('''
+      *,
+      order_items (
+        quantity,
+        price_at_time,
+        products (name)
+      )
+    ''').eq('branch_id', branchId);
+
+    // KUNCI PERBAIKAN PENCARIAN NOMOR NOTA: Mencari di short_id atau nama snapshot
+    if (query.isNotEmpty) {
+      queryBuilder = queryBuilder.or('short_id.ilike.%$query%,customer_name_snapshot.ilike.%$query%');
+    }
+
+    final response = await queryBuilder.order('created_at', ascending: false).limit(30);
+    return List<Map<String, dynamic>>.from(response);
   }
 }

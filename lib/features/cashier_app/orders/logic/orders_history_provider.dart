@@ -2,12 +2,12 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import '../../dashboard/logic/dashboard_provider.dart';
+import '../data/orders_repository.dart'; // MENGGUNAKAN ORDERS REPOSITORY
 
-// State untuk menyimpan kondisi layar riwayat
 class OrdersHistoryState {
   final List<Map<String, dynamic>> orders;
   final bool isInitialLoad;
-  final bool isSearching; // <-- TAMBAHAN BARU: Status khusus untuk pencarian
+  final bool isSearching;
   final bool isFetchingMore;
   final bool hasMore;
   final String searchQuery;
@@ -75,20 +75,16 @@ class OrdersHistoryNotifier extends StateNotifier<OrdersHistoryState> {
   }
 
   Future<void> fetchInitialOrders() async {
-    // Kosongkan orders agar UI tahu harus menampilkan skeleton (hanya saat awal)
     state = state.copyWith(isInitialLoad: true, page: 0, hasMore: true, orders: []);
     await _fetchData();
   }
 
-  // Fungsi Ketik Pencarian
   void onSearchChanged(String query) {
-    // 1. Catat apa yang diketik dan nyalakan status "sedang mencari"
     state = state.copyWith(searchQuery: query, isSearching: true);
     
     if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
     
     _debounceTimer = Timer(const Duration(milliseconds: 500), () async {
-      // 2. Kosongkan data, reset halaman, tapi biarkan status isSearching menyala
       state = state.copyWith(page: 0, hasMore: true, orders: []);
       await _fetchData();
     });
@@ -108,7 +104,8 @@ class OrdersHistoryNotifier extends StateNotifier<OrdersHistoryState> {
 
   Future<void> _fetchData({bool isLoadMore = false}) async {
     try {
-      final repo = ref.read(dashboardRepositoryProvider);
+      // MENGGUNAKAN MESIN YANG BARU (ORDERS REPOSITORY)
+      final repo = ref.read(ordersRepositoryProvider);
       final branchId = ref.read(activeBranchIdProvider);
       
       if (branchId == null) {
@@ -116,19 +113,17 @@ class OrdersHistoryNotifier extends StateNotifier<OrdersHistoryState> {
         return;
       }
 
+      // Memanggil fungsi baru yang ada short_id nya
       final newOrders = await repo.getOrdersHistory(
         query: state.searchQuery,
-        page: state.page,
         branchId: branchId,
-        startDate: state.startDate,
-        endDate: state.endDate,
       );
 
       state = state.copyWith(
         orders: isLoadMore ? [...state.orders, ...newOrders] : newOrders,
-        hasMore: newOrders.length == 15, 
-        isInitialLoad: false, // Matikan skeleton
-        isSearching: false,   // Matikan spinner di search bar
+        hasMore: newOrders.length == 30, // Limit default dari fungsi getOrdersHistory
+        isInitialLoad: false,
+        isSearching: false,
         isFetchingMore: false,
       );
     } catch (e) {
@@ -136,8 +131,13 @@ class OrdersHistoryNotifier extends StateNotifier<OrdersHistoryState> {
     }
   }
 
+  // Fungsi tambahan untuk menangani refresh (tarik ke bawah)
+  Future<void> refreshManual() async {
+    state = state.copyWith(page: 0, hasMore: true);
+    await _fetchData();
+  }
+
   void refreshAfterDelete() {
-    // Jika sedang mencari sesuatu, ulangi proses pencariannya
     if (state.searchQuery.isNotEmpty) {
       onSearchChanged(state.searchQuery);
     } else {
@@ -146,7 +146,9 @@ class OrdersHistoryNotifier extends StateNotifier<OrdersHistoryState> {
   }
 }
 
-// Pastikan deklarasi ini TIDAK menggunakan .autoDispose
+// Tambahkan inisiasi provider untuk OrdersRepository (karena sebelumnya ada di file terpisah)
+final ordersRepositoryProvider = Provider((ref) => OrdersRepository());
+
 final ordersHistoryProvider = StateNotifierProvider<OrdersHistoryNotifier, OrdersHistoryState>((ref) {
   return OrdersHistoryNotifier(ref);
 });
