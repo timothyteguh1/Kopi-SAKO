@@ -30,7 +30,8 @@ class _RegisterCustomerScreenState extends State<RegisterCustomerScreen> {
     }
     setState(() => _isLoading = true);
 
-    final errorMsg = await AuthController.register(
+    // KUNCI PERBAIKAN: Gunakan registerCustomer
+    final errorMsg = await AuthController.registerCustomer(
       _phoneController.text.trim(),
       _passwordController.text,
       _nameController.text.trim(),

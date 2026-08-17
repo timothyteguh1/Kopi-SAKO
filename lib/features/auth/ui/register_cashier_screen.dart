@@ -28,21 +28,89 @@ class _RegisterCashierScreenState extends State<RegisterCashierScreen> {
     }
     setState(() => _isLoading = true);
     
-    final errorMsg = await AuthController.register(
-      _phoneController.text.trim(), _passwordController.text, _nameController.text.trim(), _emailController.text.trim(),
-      requestedRole: 'cashier',
-    );
+    final realEmail = _emailController.text.trim();
+    final phone = _phoneController.text.trim();
+    final password = _passwordController.text;
+    final name = _nameController.text.trim();
+
+    final errorMsg = await AuthController.sendRegisterOtp(realEmail, password, name, phone);
 
     if (mounted) {
       setState(() => _isLoading = false);
       if (errorMsg != null) {
         _showError(errorMsg);
       } else {
-        // MENGGUNAKAN POP-UP SAKO UNTUK SUKSES
-        await showSakoPopUp(context, title: 'Berhasil', message: 'Akun Kasir diajukan! Menunggu admin menyetujui.', isError: false);
-        if (mounted) context.pop(); // Kembali ke halaman sebelumnya setelah tombol Mengerti ditekan
+        _showOtpDialog(realEmail, phone);
       }
     }
+  }
+
+  void _showOtpDialog(String email, String phone) {
+    final otpController = TextEditingController();
+    bool isVerifying = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setStateDialog) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            title: const Text('Masukkan Kode OTP', style: TextStyle(fontWeight: FontWeight.bold)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Kode 6 digit telah dikirim ke:\n$email', textAlign: TextAlign.center),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: otpController,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 8),
+                  decoration: InputDecoration(
+                    counterText: '',
+                    filled: true,
+                    fillColor: Colors.grey.shade100,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              if (!isVerifying)
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx), 
+                  child: const Text('Batal', style: TextStyle(color: Colors.grey))
+                ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryOrange),
+                onPressed: isVerifying ? null : () async {
+                  if (otpController.text.length != 6) return;
+                  setStateDialog(() => isVerifying = true);
+                  
+                  final error = await AuthController.verifyOtpAndFinalize(email, otpController.text, phone);
+                  
+                  if (ctx.mounted) {
+                    setStateDialog(() => isVerifying = false);
+                    if (error != null) {
+                      showSakoPopUp(ctx, title: 'Gagal', message: error, isError: true);
+                    } else {
+                      Navigator.pop(ctx); // Tutup dialog OTP
+                      await showSakoPopUp(context, title: 'Akun Diajukan!', message: 'Pendaftaran sukses! Silakan hubungi Super Admin untuk penempatan Cabang sebelum Anda bisa Login.', isError: false);
+                      if (context.mounted) context.pop(); // Kembali ke halaman Login
+                    }
+                  }
+                },
+                child: isVerifying 
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : const Text('Verifikasi & Buat Akun', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          );
+        }
+      ),
+    );
   }
 
   void _showError(String message) {

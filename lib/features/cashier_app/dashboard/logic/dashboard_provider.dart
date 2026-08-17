@@ -13,7 +13,17 @@ final dashboardRepositoryProvider = Provider<DashboardRepository>((ref) {
   return DashboardRepository();
 });
 
-// Provider Inisialisasi Cabang (Mendeteksi Admin vs Kasir)
+// Provider Daftar Cabang (KUNCI PERBAIKAN: HANYA TAMPILKAN YANG AKTIF)
+final branchesListProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) async {
+  final res = await Supabase.instance.client
+      .from('branches')
+      .select('id, name')
+      .eq('is_active', true) // <-- Hanya ambil yang nyawanya masih ada
+      .order('name');
+  return List<Map<String, dynamic>>.from(res);
+});
+
+// Provider Inisialisasi Cabang & Penjaga Status
 final branchInitializationProvider = FutureProvider.autoDispose<void>((ref) async {
   final repo = ref.watch(dashboardRepositoryProvider);
   final userRole = ref.watch(userRoleProvider).value; 
@@ -22,29 +32,57 @@ final branchInitializationProvider = FutureProvider.autoDispose<void>((ref) asyn
   if (userId == null || userRole == null) return;
 
   if (userRole == 'super_admin') {
-    final branches = await repo.getAllBranches();
-    if (branches.isNotEmpty && ref.read(activeBranchIdProvider) == null) {
-      ref.read(activeBranchIdProvider.notifier).state = branches.first['id'];
-      ref.read(activeBranchNameProvider.notifier).state = branches.first['name'];
+    // Ambil daftar cabang yang MASIH AKTIF saja
+    final res = await Supabase.instance.client.from('branches').select('id, name').eq('is_active', true).order('name');
+    final activeBranches = List<Map<String, dynamic>>.from(res);
+
+    final currentBranchId = ref.read(activeBranchIdProvider);
+    final isCurrentBranchStillActive = activeBranches.any((b) => b['id'] == currentBranchId);
+
+    if (activeBranches.isNotEmpty) {
+      // Jika Admin belum milih cabang, ATAU cabang yang sedang dibuka barusan di-NONAKTIF-kan
+      if (currentBranchId == null || !isCurrentBranchStillActive) {
+        // Otomatis lempar / pindahkan Admin ke cabang pertama yang aktif di daftar
+        ref.read(activeBranchIdProvider.notifier).state = activeBranches.first['id'];
+        ref.read(activeBranchNameProvider.notifier).state = activeBranches.first['name'];
+      }
+    } else {
+      // Jika SEMUA cabang ditutup
+      ref.read(activeBranchIdProvider.notifier).state = null;
+      ref.read(activeBranchNameProvider.notifier).state = 'Tidak ada cabang aktif';
     }
   } 
   else if (userRole == 'cashier') {
+    // Kasir: Terikat pada satu cabang
     final branchId = await repo.getCashierAssignedBranch(userId);
-    if (branchId != null && ref.read(activeBranchIdProvider) == null) {
+    
+    if (branchId == null) {
+      await AuthController.logout();
+      return;
+    }
+
+    // Cek apakah cabang tempat kasir ditugaskan masih hidup (is_active)
+    final branchDetails = await Supabase.instance.client
+        .from('branches')
+        .select('is_active')
+        .eq('id', branchId)
+        .maybeSingle();
+
+    if (branchDetails == null || branchDetails['is_active'] == false) {
+      // Kasir langsung ditendang ke halaman login jika cabangnya dinonaktifkan
+      await AuthController.logout();
+      return;
+    }
+
+    if (ref.read(activeBranchIdProvider) == null) {
       ref.read(activeBranchIdProvider.notifier).state = branchId;
       ref.read(activeBranchNameProvider.notifier).state = 'Cabang Penugasan'; 
     }
   }
 });
 
-// Provider Daftar Cabang 
-final branchesListProvider = FutureProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
-  final repo = ref.watch(dashboardRepositoryProvider);
-  return repo.getAllBranches();
-});
-
 // =====================================================================
-// PERBAIKAN: Provider Saldo Hari Ini (DIUBAH KE STREAM AGAR LIVE)
+// Provider Saldo Hari Ini (DIUBAH KE STREAM AGAR LIVE)
 // =====================================================================
 final todaySalesProvider = StreamProvider.autoDispose<DailySales>((ref) {
   final repo = ref.watch(dashboardRepositoryProvider);

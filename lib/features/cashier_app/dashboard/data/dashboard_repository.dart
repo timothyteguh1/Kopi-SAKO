@@ -77,13 +77,14 @@ class DashboardRepository {
   }
 
   // 4. Ambil ID Cabang Khusus Kasir dari tabel cashiers
+ // 4. Ambil ID Cabang Khusus Kasir (DIPERBARUI)
   Future<String?> getCashierAssignedBranch(String userId) async {
     final response = await _supabase
-        .from('cashiers')
-        .select('assigned_branch_id')
+        .from('profiles') // KUNCI PERBAIKAN: Gunakan tabel profiles
+        .select('branch_id') // KUNCI PERBAIKAN: Gunakan kolom branch_id
         .eq('id', userId)
         .maybeSingle();
-    return response?['assigned_branch_id'] as String?;
+    return response?['branch_id'] as String?;
   }
 
   // 5. Ambil Daftar Pesanan Selesai Hari Ini

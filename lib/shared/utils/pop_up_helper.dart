@@ -69,12 +69,15 @@ Future<void> showSakoPopUp(
           ),
         ],
       ),
+      // Contoh perbaikan struktur teks di dalam pop_up_helper.dart
       content: Text(
-        finalMessage,
+        message,
+        textAlign: TextAlign
+            .center, // KUNCI RAPI: Letakkan teks di tengah agar seimbang
         style: const TextStyle(
           color: AppColors.textDark,
           fontSize: 14,
-          height: 1.5,
+          height: 1.4, // Memberikan jarak antar baris agar tidak dempet
         ),
       ),
       actions: [

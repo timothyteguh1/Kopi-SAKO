@@ -49,7 +49,6 @@ class ManagementScreen extends ConsumerWidget {
                 : 'Lihat sisa stok di cabang ini',
             icon: Icons.inventory_2_outlined,
             onTap: () {
-              // KUNCI PERBAIKAN: Gunakan context.go()
               context.go('/cashier/management/stock');
             },
           ),
@@ -61,7 +60,6 @@ class ManagementScreen extends ConsumerWidget {
             subtitle: 'Input pengeluaran belanja cabang',
             icon: Icons.receipt_long_outlined,
             onTap: () {
-              // KUNCI PERBAIKAN: Gunakan context.go()
               context.go('/cashier/management/purchases');
             },
           ),
@@ -75,7 +73,6 @@ class ManagementScreen extends ConsumerWidget {
                 : 'Lihat daftar pelanggan & sisa poin',
             icon: Icons.group_outlined,
             onTap: () {
-              // KUNCI PERBAIKAN: Gunakan context.go()
               context.go('/cashier/management/customers');
             },
           ),
@@ -112,7 +109,10 @@ class ManagementScreen extends ConsumerWidget {
               title: 'Kelola Kasir',
               subtitle: 'Tugaskan kasir ke cabang tertentu',
               icon: Icons.people_outline,
-              onTap: () {},
+              onTap: () {
+                // KUNCI PERBAIKAN: Arahkan ke rute admin kasir
+                context.go('/cashier/management/admin_cashiers');
+              },
             ),
 
             // MENU 6: KELOLA CABANG
@@ -121,7 +121,10 @@ class ManagementScreen extends ConsumerWidget {
               title: 'Kelola Cabang',
               subtitle: 'Tambah, edit, atau tutup cabang',
               icon: Icons.storefront_outlined,
-              onTap: () {},
+              onTap: () {
+                // KUNCI PERBAIKAN: Arahkan ke rute admin cabang
+                context.go('/cashier/management/admin_branches');
+              },
             ),
           ],
         ],

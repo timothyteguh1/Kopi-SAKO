@@ -19,6 +19,10 @@ import '../features/cashier_app/menu_management/stock/presentation/stock_screen.
 import '../features/cashier_app/purchases/presentation/purchases_screen.dart';
 import '../features/cashier_app/menu_management/customers/presentation/customer_list_screen.dart';
 
+// --- IMPORT BARU UNTUK ADMIN ---
+import '../features/cashier_app/menu_management/admin/presentation/branches_admin_screen.dart';
+import '../features/cashier_app/menu_management/admin/presentation/cashiers_admin_screen.dart';
+
 // Global Key untuk masing-masing router
 final _rootNavigatorCustomer = GlobalKey<NavigatorState>();
 final _rootNavigatorCashier = GlobalKey<NavigatorState>();
@@ -140,6 +144,15 @@ class AppRouter {
                     GoRoute(
                       path: 'customers', 
                       builder: (context, state) => const CustomerListScreen(),
+                    ),
+                    // --- RUTE BARU ADMIN ---
+                    GoRoute(
+                      path: 'admin_branches', 
+                      builder: (context, state) => const BranchesAdminScreen(),
+                    ),
+                    GoRoute(
+                      path: 'admin_cashiers', 
+                      builder: (context, state) => const CashiersAdminScreen(),
                     ),
                   ],
                 ),
