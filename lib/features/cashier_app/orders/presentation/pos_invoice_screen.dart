@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+// IMPORT RIVERPOD & PROVIDER KITA
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:kopi_sako/features/cashier_app/dashboard/logic/dashboard_provider.dart';
+import 'package:kopi_sako/features/cashier_app/dashboard/logic/printer_provider.dart';
 
-class PosInvoiceScreen extends StatefulWidget {
+// KUNCI PERBAIKAN: Ubah StatefulWidget menjadi ConsumerStatefulWidget
+class PosInvoiceScreen extends ConsumerStatefulWidget {
   final List<Map<String, dynamic>> cartItems;
   final int total;
   final String paymentMethod;
@@ -24,10 +29,11 @@ class PosInvoiceScreen extends StatefulWidget {
   });
 
   @override
-  State<PosInvoiceScreen> createState() => _PosInvoiceScreenState();
+  ConsumerState<PosInvoiceScreen> createState() => _PosInvoiceScreenState();
 }
 
-class _PosInvoiceScreenState extends State<PosInvoiceScreen> {
+// KUNCI PERBAIKAN: Ubah State menjadi ConsumerState
+class _PosInvoiceScreenState extends ConsumerState<PosInvoiceScreen> {
   int _earnedPoints = 0;
   bool _isFetchingPoints = true;
 
@@ -69,7 +75,6 @@ class _PosInvoiceScreenState extends State<PosInvoiceScreen> {
     }
   }
 
-  // FUNGSI HELPER: Pop-Up Notifikasi Tengah
   void _showPopUp(
     BuildContext context,
     String title,
@@ -108,7 +113,7 @@ class _PosInvoiceScreenState extends State<PosInvoiceScreen> {
             width: double.infinity,
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE65C00), // Warna Oranye SAKO
+                backgroundColor: const Color(0xFFE65C00), 
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -186,7 +191,6 @@ class _PosInvoiceScreenState extends State<PosInvoiceScreen> {
       if (!mounted) return;
       Navigator.of(currentContext, rootNavigator: true).pop(); // Tutup loading
 
-      // Munculkan Pop-up Berhasil
       await showDialog(
         context: currentContext,
         barrierDismissible: false,
@@ -236,7 +240,6 @@ class _PosInvoiceScreenState extends State<PosInvoiceScreen> {
         ),
       );
 
-      // Tutup layar invoice HANYA SETELAH admin menekan tombol mengerti
       if (mounted) {
         if (widget.onOrderDeleted != null) widget.onOrderDeleted!();
         Navigator.of(currentContext).pop();
@@ -253,6 +256,7 @@ class _PosInvoiceScreenState extends State<PosInvoiceScreen> {
     symbol: 'Rp ',
     decimalDigits: 0,
   ).format(number);
+  
   String get _todayDate =>
       DateFormat('dd MMM yyyy, HH:mm').format(DateTime.now());
 
@@ -514,13 +518,44 @@ class _PosInvoiceScreenState extends State<PosInvoiceScreen> {
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                                onPressed: () {
-                                  _showPopUp(
-                                    context,
-                                    'Informasi',
-                                    'Fitur cetak printer bluetooth sedang dikembangkan.',
-                                    isError: false,
-                                  );
+                                // FUNGSI CETAK PRINTER SUDAH TERHUBUNG KE REF
+                                onPressed: () async {
+                                  final printerState = ref.read(printerProvider);
+                                  final branchName = ref.read(activeBranchNameProvider);
+
+                                  if (!printerState.isConnected) {
+                                    _showPopUp(
+                                      context,
+                                      'Printer Putus',
+                                      'Silakan sambungkan printer Bluetooth Anda melalui menu pengaturan terlebih dahulu.',
+                                      isError: true,
+                                    );
+                                    return;
+                                  }
+
+                                  try {
+                                    await ref.read(printerProvider.notifier).printReceipt(
+                                          branchName: branchName, 
+                                          cartItems: widget.cartItems,
+                                          total: widget.total,
+                                          paymentMethod: widget.paymentMethod,
+                                          customerName: widget.customerName,
+                                          orderId: widget.orderId ?? 'Selesai',
+                                        );
+                                    _showPopUp(
+                                      context,
+                                      'Berhasil',
+                                      'Struk sedang dicetak...',
+                                      isError: false,
+                                    );
+                                  } catch (e) {
+                                    _showPopUp(
+                                      context,
+                                      'Gagal Cetak',
+                                      'Pastikan printer menyala dan kertas tersedia.',
+                                      isError: true,
+                                    );
+                                  }
                                 },
                               ),
                             ),

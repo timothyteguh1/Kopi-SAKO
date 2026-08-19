@@ -43,8 +43,10 @@ class _LoginScreenState extends State<LoginScreen> {
     );
 
     if (mounted) {
+      // KUNCI FIX 1: Tutup pop-up loading wajib dilakukan APAPUN hasilnya
+      Navigator.pop(context); 
+      
       if (errorMsg != null) {
-        Navigator.pop(context);
         setState(() => _isLoading = false);
         _showError(errorMsg);
       }

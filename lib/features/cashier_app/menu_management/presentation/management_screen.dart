@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart'; // IMPORT GO_ROUTER
+import 'package:go_router/go_router.dart'; 
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/logic/auth_provider.dart';
@@ -90,6 +90,17 @@ class ManagementScreen extends ConsumerWidget {
             },
           ),
 
+          // MENU 5: PENGATURAN PRINTER (BARU)
+          _buildMenuCard(
+            context,
+            title: 'Pengaturan Printer',
+            subtitle: 'Sambungkan ke printer thermal bluetooth',
+            icon: Icons.print_outlined,
+            onTap: () {
+              context.go('/cashier/management/printer');
+            },
+          ),
+
           // --- PEMBATAS KHUSUS SUPER ADMIN ---
           if (isAdmin) ...[
             const SizedBox(height: 24),
@@ -103,26 +114,24 @@ class ManagementScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 12),
 
-            // MENU 5: KELOLA KASIR
+            // MENU 6: KELOLA KASIR
             _buildMenuCard(
               context,
               title: 'Kelola Kasir',
               subtitle: 'Tugaskan kasir ke cabang tertentu',
               icon: Icons.people_outline,
               onTap: () {
-                // KUNCI PERBAIKAN: Arahkan ke rute admin kasir
                 context.go('/cashier/management/admin_cashiers');
               },
             ),
 
-            // MENU 6: KELOLA CABANG
+            // MENU 7: KELOLA CABANG
             _buildMenuCard(
               context,
               title: 'Kelola Cabang',
               subtitle: 'Tambah, edit, atau tutup cabang',
               icon: Icons.storefront_outlined,
               onTap: () {
-                // KUNCI PERBAIKAN: Arahkan ke rute admin cabang
                 context.go('/cashier/management/admin_branches');
               },
             ),

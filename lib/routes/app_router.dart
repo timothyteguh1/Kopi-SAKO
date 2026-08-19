@@ -22,6 +22,7 @@ import '../features/cashier_app/menu_management/customers/presentation/customer_
 // --- IMPORT BARU UNTUK ADMIN ---
 import '../features/cashier_app/menu_management/admin/presentation/branches_admin_screen.dart';
 import '../features/cashier_app/menu_management/admin/presentation/cashiers_admin_screen.dart';
+import '../features/cashier_app/menu_management/presentation/printer_settings_screen.dart';
 
 // Global Key untuk masing-masing router
 final _rootNavigatorCustomer = GlobalKey<NavigatorState>();
@@ -144,6 +145,10 @@ class AppRouter {
                     GoRoute(
                       path: 'customers', 
                       builder: (context, state) => const CustomerListScreen(),
+                    ),
+                    GoRoute(
+                      path: 'printer', 
+                      builder: (context, state) => const PrinterSettingsScreen(),
                     ),
                     // --- RUTE BARU ADMIN ---
                     GoRoute(

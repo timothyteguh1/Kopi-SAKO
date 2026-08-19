@@ -40,6 +40,7 @@ dependencies:
   flutter_dotenv: ^6.0.1
   intl: ^0.20.3
   image_picker: ^1.2.3
+  blue_thermal_printer: ^1.2.3
 
 dev_dependencies:
   flutter_test:
