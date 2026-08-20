@@ -1,10 +1,8 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:latlong2/latlong.dart';
 
-// --- TAMBAHAN: phone_number ---
 class RadarBranch {
   final String id;
   final String name;
@@ -39,10 +37,31 @@ class RadarState {
 }
 
 class RadarNotifier extends StateNotifier<RadarState> {
-  RadarNotifier() : super(RadarState());
+  RadarNotifier() : super(RadarState()) {
+    _initRealtimeSubscription(); // Aktifkan pendengar live
+  }
   
   final _supabase = Supabase.instance.client;
   final Distance _distanceCalc = const Distance(); 
+  RealtimeChannel? _realtimeChannel;
+
+  // Mendengarkan perubahan tabel branches secara real-time
+  void _initRealtimeSubscription() {
+    _realtimeChannel = _supabase.channel('public:branches').onPostgresChanges(
+      event: PostgresChangeEvent.all, 
+      schema: 'public',
+      table: 'branches',
+      callback: (payload) {
+         _fetchActiveBranchesOnly();
+      }
+    ).subscribe();
+  }
+
+  @override
+  void dispose() {
+    _supabase.removeChannel(_realtimeChannel!);
+    super.dispose();
+  }
 
   Future<void> scanRadar() async {
     state = state.copyWith(isLoading: true, error: null);
@@ -60,10 +79,22 @@ class RadarNotifier extends StateNotifier<RadarState> {
       Position pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
       final LatLng customerPos = LatLng(pos.latitude, pos.longitude);
 
-      // --- TAMBAHAN: Tarik kolom 'phone' dari tabel branches ---
+      state = state.copyWith(myLocation: customerPos);
+      await _fetchActiveBranchesOnly();
+
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+    }
+  }
+
+  Future<void> _fetchActiveBranchesOnly() async {
+    if (state.myLocation == null) return;
+    
+    try {
+      // Menggunakan 'whatsapp_number' sesuai dengan skema tabel Supabase Anda[cite: 14]
       final List<dynamic> rawBranches = await _supabase
           .from('branches')
-          .select('id, name, address, whatsapp_number, current_latitude, current_longitude')
+          .select('id, name, address, whatsapp_number, current_latitude, current_longitude') 
           .eq('is_broadcasting', true)
           .eq('is_active', true);
 
@@ -71,7 +102,7 @@ class RadarNotifier extends StateNotifier<RadarState> {
       for (var b in rawBranches) {
         if (b['current_latitude'] != null && b['current_longitude'] != null) {
           final branchPos = LatLng(b['current_latitude'], b['current_longitude']);
-          final meter = _distanceCalc.as(LengthUnit.Meter, customerPos, branchPos).toInt();
+          final meter = _distanceCalc.as(LengthUnit.Meter, state.myLocation!, branchPos).toInt();
           final time = (meter / 80).ceil(); 
 
           processedBranches.add(
@@ -79,7 +110,7 @@ class RadarNotifier extends StateNotifier<RadarState> {
               id: b['id'],
               name: b['name'],
               description: b['address'] ?? 'Kopi SAKO',
-              phone: b['whatsapp_number'] ?? '',// Simpan nomor WA
+              phone: b['whatsapp_number'] ?? '', // Mengambil data dari whatsapp_number[cite: 14]
               location: branchPos,
               distanceInMeters: meter,
               estimatedTimeMinutes: time == 0 ? 1 : time,
@@ -89,7 +120,7 @@ class RadarNotifier extends StateNotifier<RadarState> {
       }
 
       processedBranches.sort((a, b) => a.distanceInMeters.compareTo(b.distanceInMeters));
-      state = state.copyWith(myLocation: customerPos, activeBranches: processedBranches, isLoading: false);
+      state = state.copyWith(activeBranches: processedBranches, isLoading: false);
 
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());

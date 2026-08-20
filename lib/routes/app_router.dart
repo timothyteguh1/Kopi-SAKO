@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:kopi_sako/features/auth/ui/forgot_password_screen.dart';
 import '../features/auth/logic/auth_provider.dart';
 
 import '../features/auth/ui/login_screen.dart';
@@ -50,8 +51,12 @@ class AppRouter {
         final isLoggedIn = authState != null;
         final isGoingToLogin = state.matchedLocation == '/login';
         final isGoingToRegister = state.matchedLocation == '/register';
+        
+        // ---> TAMBAHAN: Izinkan rute lupa sandi <---
+        final isGoingToForgotPass = state.matchedLocation == '/forgot-password';
 
-        if (!isLoggedIn && !isGoingToLogin && !isGoingToRegister) return '/login';
+        // ---> TAMBAHAN: Tambahkan isGoingToForgotPass ke dalam syarat pengecualian <---
+        if (!isLoggedIn && !isGoingToLogin && !isGoingToRegister && !isGoingToForgotPass) return '/login';
         
         if (isLoggedIn) {
           // CEK ROLE: Jika bukan customer, tendang dan beri pesan
@@ -73,13 +78,15 @@ class AppRouter {
             return '/login'; 
           }
 
-          if (isGoingToLogin || isGoingToRegister) return '/customer/radar';
+          // ---> TAMBAHAN: Cegah pengguna yang sudah login untuk kembali ke layar Lupa Sandi <---
+          if (isGoingToLogin || isGoingToRegister || isGoingToForgotPass) return '/customer/radar';
         }
         return null;
       },
       routes: [
         GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
         GoRoute(path: '/register', builder: (context, state) => const RegisterCustomerScreen()),
+        GoRoute(path: '/forgot-password', builder: (context, state) => const ForgotPasswordScreen()),
         
         // --- SISTEM NAVIGASI BAWAH CUSTOMER ---
         StatefulShellRoute.indexedStack(

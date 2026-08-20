@@ -243,7 +243,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           Align(
                             alignment: Alignment.centerRight,
                             child: TextButton(
-                              onPressed: () {},
+                              onPressed: () {
+                                // ARAHKAN KE HALAMAN LUPA SANDI
+                                context.push('/forgot-password');
+                              },
                               child: const Text(
                                 'Lupa password?',
                                 style: TextStyle(
