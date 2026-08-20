@@ -10,7 +10,7 @@ import '../logic/dashboard_provider.dart';
 import '../../orders/presentation/pos_customer_screen.dart';
 import '../../orders/presentation/pos_invoice_screen.dart';
 import '../../orders/logic/orders_provider.dart';
-
+import '../logic/cashier_location_provider.dart';
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
@@ -442,6 +442,87 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       data: (sales) {
                         return Column(
                           children: [
+                            Consumer(
+                              builder: (context, ref, child) {
+                                final locationState = ref.watch(cashierLocationProvider);
+                                
+                                // ---> TAMBAHAN 1: Ambil ID Cabang yang sedang aktif <---
+                                final activeBranchId = ref.watch(activeBranchIdProvider); 
+
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 16),
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: locationState.isBroadcasting ? Colors.green.shade50 : Colors.white,
+                                    border: Border.all(
+                                      color: locationState.isBroadcasting ? Colors.green : Colors.grey.shade300,
+                                      width: 2,
+                                    ),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: locationState.isBroadcasting ? Colors.green : Colors.grey.shade300,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Icon(
+                                          Icons.radar, 
+                                          color: locationState.isBroadcasting ? Colors.white : Colors.grey.shade600,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              locationState.isBroadcasting ? 'Sinyal Radar Aktif' : 'Sinyal Radar Mati',
+                                              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              locationState.isBroadcasting 
+                                                  ? 'Pelanggan dapat melihat gerobak ini di peta.' 
+                                                  : 'Gerobak tersembunyi dari pelanggan.',
+                                              style: TextStyle(fontSize: 12, color: Colors.grey.shade600, height: 1.2),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      if (locationState.isLoading)
+                                        const CircularProgressIndicator(color: AppColors.primaryOrange)
+                                      else
+                                        Switch(
+                                          value: locationState.isBroadcasting,
+                                          activeColor: Colors.green,
+                                          
+                                          // ---> TAMBAHAN 2: Ubah onChanged menjadi async dan kirim 2 data <---
+                                          onChanged: (bool value) async {
+                                            final errorMsg = await ref.read(cashierLocationProvider.notifier)
+                                                .toggleBroadcasting(value, activeBranchId);
+                                            
+                                            // Jika ada error (misal GPS belum diizinkan), munculkan pop-up!
+                                            if (errorMsg != null && context.mounted) {
+                                              _showPopUpMessage(
+                                                context, 
+                                                'Gagal Menyalakan Radar', 
+                                                errorMsg, 
+                                                isError: true
+                                              );
+                                            }
+                                          },
+                                          
+                                        ),
+                                    ],
+                                  ),
+                                );
+                              }
+                            ),
+                            
+                            // (KODE ANDA YANG ASLI LANJUT DI BAWAH INI)
                             GestureDetector(
                               onTap: () =>
                                   setState(() => isExpanded = !isExpanded),

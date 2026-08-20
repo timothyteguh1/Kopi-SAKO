@@ -83,6 +83,9 @@ class _RegisterCustomerScreenState extends State<RegisterCustomerScreen> {
     }
   }
 
+  // ==========================================================
+  // FUNGSI INI YANG DIPERBAIKI (TIDAK ADA context.pop() JIKA SUKSES)
+  // ==========================================================
   Future<void> _handleRegister() async {
     if (_nameController.text.isEmpty || _phoneController.text.isEmpty ||
         _emailController.text.isEmpty || _passwordController.text.isEmpty) {
@@ -97,21 +100,31 @@ class _RegisterCustomerScreenState extends State<RegisterCustomerScreen> {
 
     setState(() => _isLoading = true);
 
-    // Finalisasi pembuatan akun Pelanggan SAKO seutuhnya
-    final errorMsg = await AuthController.registerCustomer(
-      _phoneController.text.trim(),
-      _passwordController.text,
-      _nameController.text.trim(),
-      _emailController.text.trim(),
-    );
+    try {
+      // Finalisasi pembuatan akun Pelanggan SAKO seutuhnya
+      final errorMsg = await AuthController.registerCustomer(
+        _phoneController.text.trim(),
+        _passwordController.text,
+        _nameController.text.trim(),
+        _emailController.text.trim(),
+      );
 
-    if (mounted) {
-      setState(() => _isLoading = false);
+      // Pastikan widget masih ada sebelum mengeksekusi kode UI
+      if (!mounted) return;
+
       if (errorMsg != null) {
+        setState(() => _isLoading = false);
         showSakoPopUp(context, title: 'Pendaftaran Gagal', message: errorMsg, isError: true);
       } else {
-        await showSakoPopUp(context, title: 'Berhasil', message: 'Akun Pelanggan SAKO berhasil dibuat! Silakan masuk.', isError: false);
-        if (mounted) context.pop(); 
+        // --- KUNCI FIX ---
+        // Jika sukses (errorMsg == null), Router sudah memindahkan kita ke /home.
+        // JANGAN panggil context.pop() atau setState() di sini.
+        // Kita cukup membiarkan halamannya hancur secara alami.
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        showSakoPopUp(context, title: 'Terjadi Kesalahan', message: e.toString(), isError: true);
       }
     }
   }

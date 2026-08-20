@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; // TAMBAHAN: Wajib di-import
 import '../logic/auth_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../shared/widgets/sako_text_field.dart';
@@ -37,6 +38,46 @@ class _LoginScreenState extends State<LoginScreen> {
 
     await Future.delayed(const Duration(milliseconds: 300));
 
+    // ==========================================================
+    // TAMBAHAN BARU: CEK PERAN SEBELUM PROSES LOGIN DIMULAI
+    // Ini mencegah masalah "masuk lalu langsung logout"
+    // ==========================================================
+    try {
+      final supabase = Supabase.instance.client;
+      // Cari peran (role) berdasarkan nomor WA yang diinput
+      final profileData = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('phone_number', _phoneController.text.trim())
+          .maybeSingle();
+
+      if (profileData != null) {
+        final role = profileData['role'];
+        
+        // Pintu Gerbang Keamanan
+        if (!widget.isCashierApp && (role == 'cashier' || role == 'super_admin')) {
+          if (mounted) {
+            Navigator.pop(context); // Tutup animasi loading
+            setState(() => _isLoading = false);
+            _showError('Akses Ditolak!\nAkun staf tidak bisa masuk ke aplikasi pelanggan.');
+          }
+          return; // BATALKAN PROSES LOGIN
+        } else if (widget.isCashierApp && role == 'customer') {
+          if (mounted) {
+            Navigator.pop(context); // Tutup animasi loading
+            setState(() => _isLoading = false);
+            _showError('Akses Ditolak!\nPelanggan tidak bisa masuk ke sistem kasir.');
+          }
+          return; // BATALKAN PROSES LOGIN
+        }
+      }
+    } catch (e) {
+      // Jika terjadi error pada pengecekan (misal karena jaringan), 
+      // kita abaikan dan biarkan proses login utama berjalan.
+    }
+    // ==========================================================
+
+    // Lanjut ke proses login utama HANYA jika peran sudah sesuai
     final errorMsg = await AuthController.login(
       _phoneController.text.trim(),
       _passwordController.text,
