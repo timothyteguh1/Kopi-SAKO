@@ -1,10 +1,11 @@
+import 'dart:async'; // TAMBAHAN IMPORT
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:http/http.dart' as http; // IMPORT BARU
+import 'package:http/http.dart' as http;
 
 class RadarBranch {
   final String id;
@@ -24,7 +25,8 @@ class RadarBranch {
 class RadarState {
   final LatLng? myLocation;
   final List<RadarBranch> activeBranches;
-  final List<LatLng> activeRoute; // TAMBAHAN: Menyimpan garis rute jalan
+  final List<LatLng> activeRoute; 
+  final RadarBranch? activeTarget; // OTAK BARU: Mengingat gerobak mana yang sedang dilacak
   final bool isLoading;
   final String? error;
 
@@ -32,6 +34,7 @@ class RadarState {
     this.myLocation, 
     this.activeBranches = const [], 
     this.activeRoute = const [], 
+    this.activeTarget,
     this.isLoading = false, 
     this.error
   });
@@ -40,6 +43,8 @@ class RadarState {
     LatLng? myLocation, 
     List<RadarBranch>? activeBranches, 
     List<LatLng>? activeRoute,
+    RadarBranch? activeTarget,
+    bool clearTarget = false, // Pemicu hapus target
     bool? isLoading, 
     String? error
   }) {
@@ -47,6 +52,7 @@ class RadarState {
       myLocation: myLocation ?? this.myLocation,
       activeBranches: activeBranches ?? this.activeBranches,
       activeRoute: activeRoute ?? this.activeRoute,
+      activeTarget: clearTarget ? null : (activeTarget ?? this.activeTarget),
       isLoading: isLoading ?? this.isLoading,
       error: error,
     );
@@ -61,6 +67,7 @@ class RadarNotifier extends StateNotifier<RadarState> {
   final _supabase = Supabase.instance.client;
   final Distance _distanceCalc = const Distance(); 
   RealtimeChannel? _realtimeChannel;
+  StreamSubscription<Position>? _locationStream; // KAMERA VIDEO UNTUK LIVE TRACKING
 
   void _initRealtimeSubscription() {
     _realtimeChannel = _supabase.channel('public:branches').onPostgresChanges(
@@ -76,11 +83,15 @@ class RadarNotifier extends StateNotifier<RadarState> {
   @override
   void dispose() {
     _supabase.removeChannel(_realtimeChannel!);
+    _locationStream?.cancel(); // Matikan kamera video saat keluar
     super.dispose();
   }
 
-  Future<void> scanRadar() async {
-    state = state.copyWith(isLoading: true, error: null, activeRoute: []); // Bersihkan rute saat refresh
+  // ==============================================================
+  // MESIN LIVE TRACKING BARU
+  // ==============================================================
+  Future<void> startLiveTracking() async {
+    state = state.copyWith(isLoading: true, error: null);
 
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -92,11 +103,30 @@ class RadarNotifier extends StateNotifier<RadarState> {
         if (permission == LocationPermission.denied) throw Exception('Izin lokasi ditolak.');
       }
 
-      Position pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-      final LatLng customerPos = LatLng(pos.latitude, pos.longitude);
-
-      state = state.copyWith(myLocation: customerPos);
+      // 1. Jepret lokasi awal dengan cepat
+      Position initialPos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      state = state.copyWith(myLocation: LatLng(initialPos.latitude, initialPos.longitude));
       await _fetchActiveBranchesOnly();
+
+      // 2. Nyalakan mode Live Streaming (Pembaruan setiap 10 Meter)
+      _locationStream?.cancel();
+      _locationStream = Geolocator.getPositionStream(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 10, // KUNCI RAHASIA: Hemat baterai & hindari pemblokiran OSRM
+        )
+      ).listen((Position pos) {
+        final newPos = LatLng(pos.latitude, pos.longitude);
+        state = state.copyWith(myLocation: newPos, isLoading: false);
+        
+        // Perbarui jarak ke semua gerobak
+        _fetchActiveBranchesOnly();
+
+        // Jika rute sedang digambar di layar, gambar ulang secara live!
+        if (state.activeTarget != null) {
+          getRouteToBranch(state.activeTarget!);
+        }
+      });
 
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
@@ -138,20 +168,22 @@ class RadarNotifier extends StateNotifier<RadarState> {
       state = state.copyWith(activeBranches: processedBranches, isLoading: false);
 
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      state = state.copyWith(error: e.toString()); // Jangan matikan loading agar map tetap hidup
     }
   }
 
   // ==============================================================
-  // FUNGSI BARU: MENGAMBIL RUTE JALAN DARI OSRM API (GRATIS)
+  // FUNGSI RUTE: KINI MENERIMA OBJEK GEROBAK SEBAGAI TARGET
   // ==============================================================
-  Future<void> getRouteToBranch(LatLng destination) async {
+  Future<void> getRouteToBranch(RadarBranch destination) async {
     if (state.myLocation == null) return;
+
+    // Kunci target agar stream GPS bisa mengejarnya
+    state = state.copyWith(activeTarget: destination); 
 
     try {
       final start = state.myLocation!;
-      // Panggil OSRM API untuk profil mobil/motor (driving)
-      final url = 'https://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${destination.longitude},${destination.latitude}?geometries=geojson';
+      final url = 'https://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${destination.location.longitude},${destination.location.latitude}?geometries=geojson';
       
       final response = await http.get(Uri.parse(url));
       
@@ -159,20 +191,16 @@ class RadarNotifier extends StateNotifier<RadarState> {
         final data = json.decode(response.body);
         final coords = data['routes'][0]['geometry']['coordinates'] as List;
         
-        // OSRM mengembalikan [Longitude, Latitude], FlutterMap butuh [Latitude, Longitude]
         final routePoints = coords.map((c) => LatLng(c[1] as double, c[0] as double)).toList();
-        
         state = state.copyWith(activeRoute: routePoints);
       }
     } catch (e) {
-      // Jika gagal menarik rute, diamkan saja agar tidak mengganggu (fail-safe)
-      print('Gagal menarik rute: $e');
+      print('Gagal menarik rute live: $e');
     }
   }
 
-  // Menghapus rute saat bottom sheet ditutup
   void clearRoute() {
-    state = state.copyWith(activeRoute: []);
+    state = state.copyWith(activeRoute: [], clearTarget: true);
   }
 }
 

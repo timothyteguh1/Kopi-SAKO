@@ -7,6 +7,7 @@ import '../features/auth/logic/auth_provider.dart';
 import '../features/auth/ui/login_screen.dart';
 import '../features/auth/ui/register_customer_screen.dart';
 import '../features/auth/ui/register_cashier_screen.dart';
+import '../features/auth/ui/splash_screen.dart'; // ---> TAMBAHAN: Import Splash Screen <---
 
 // ==============================================================
 // IMPORT CASHIER APP UI
@@ -46,22 +47,23 @@ class AppRouter {
 
     return GoRouter(
       navigatorKey: _rootNavigatorCustomer,
-      initialLocation: '/customer/radar',
+      initialLocation: '/splash', // ---> TAMBAHAN: Rute awal kini adalah splash screen <---
       redirect: (context, state) {
         final isLoggedIn = authState != null;
         final isGoingToLogin = state.matchedLocation == '/login';
         final isGoingToRegister = state.matchedLocation == '/register';
-        
-        // ---> TAMBAHAN: Izinkan rute lupa sandi <---
         final isGoingToForgotPass = state.matchedLocation == '/forgot-password';
+        final isGoingToSplash = state.matchedLocation == '/splash'; // ---> TAMBAHAN <---
 
-        // ---> TAMBAHAN: Tambahkan isGoingToForgotPass ke dalam syarat pengecualian <---
+        // ---> TAMBAHAN: Izinkan Splash Screen berjalan bebas tanpa dicegat <---
+        if (isGoingToSplash) return null; 
+
         if (!isLoggedIn && !isGoingToLogin && !isGoingToRegister && !isGoingToForgotPass) return '/login';
         
         if (isLoggedIn) {
           // CEK ROLE: Jika bukan customer, tendang dan beri pesan
           if (userRole != null && userRole != 'customer') {
-            AuthController.logout(); // Proses logout
+            AuthController.logout(); 
 
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (_rootNavigatorCustomer.currentContext != null) {
@@ -78,12 +80,12 @@ class AppRouter {
             return '/login'; 
           }
 
-          // ---> TAMBAHAN: Cegah pengguna yang sudah login untuk kembali ke layar Lupa Sandi <---
           if (isGoingToLogin || isGoingToRegister || isGoingToForgotPass) return '/customer/radar';
         }
         return null;
       },
       routes: [
+        GoRoute(path: '/splash', builder: (context, state) => const SplashScreen()), // ---> TAMBAHAN <---
         GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
         GoRoute(path: '/register', builder: (context, state) => const RegisterCustomerScreen()),
         GoRoute(path: '/forgot-password', builder: (context, state) => const ForgotPasswordScreen()),
@@ -94,7 +96,6 @@ class AppRouter {
             return MainCustomerScaffold(navigationShell: navigationShell);
           },
           branches: [
-            // TAB 1: Radar (Peta)
             StatefulShellBranch(
               routes: [
                 GoRoute(
@@ -103,8 +104,6 @@ class AppRouter {
                 ),
               ],
             ),
-            
-            // TAB 2: Pesanan (Incoming / Riwayat)
             StatefulShellBranch(
               routes: [
                 GoRoute(
@@ -113,8 +112,6 @@ class AppRouter {
                 ),
               ],
             ),
-            
-            // TAB 3: Profil
             StatefulShellBranch(
               routes: [
                 GoRoute(
@@ -138,32 +135,33 @@ class AppRouter {
     
     return GoRouter(
       navigatorKey: _rootNavigatorCashier,
-      initialLocation: '/cashier/dashboard',
+      initialLocation: '/splash', // ---> TAMBAHAN: Rute awal kini adalah splash screen <---
       redirect: (context, state) {
         final isLoggedIn = authState != null;
         final isGoingToLogin = state.matchedLocation == '/login';
         final isGoingToRegister = state.matchedLocation == '/register';
+        final isGoingToForgotPass = state.matchedLocation == '/forgot-password';
+        final isGoingToSplash = state.matchedLocation == '/splash'; // ---> TAMBAHAN <---
 
-        if (!isLoggedIn && !isGoingToLogin && !isGoingToRegister) return '/login';
+        // ---> TAMBAHAN: Izinkan Splash Screen berjalan bebas tanpa dicegat <---
+        if (isGoingToSplash) return null;
+
+        if (!isLoggedIn && !isGoingToLogin && !isGoingToRegister && !isGoingToForgotPass) return '/login';
         
         if (isLoggedIn) {
           if (userRole != null && userRole != 'cashier' && userRole != 'super_admin') {
             AuthController.logout();
             return '/login';
           }
-          if (isGoingToLogin || isGoingToRegister) return '/cashier/dashboard';
+          if (isGoingToLogin || isGoingToRegister || isGoingToForgotPass) return '/cashier/dashboard';
         }
         return null;
       },
       routes: [
-        GoRoute(
-          path: '/login', 
-          builder: (context, state) => const LoginScreen(isCashierApp: true)
-        ),
-        GoRoute(
-          path: '/register', 
-          builder: (context, state) => const RegisterCashierScreen()
-        ),
+        GoRoute(path: '/splash', builder: (context, state) => const SplashScreen()), // ---> TAMBAHAN <---
+        GoRoute(path: '/login', builder: (context, state) => const LoginScreen(isCashierApp: true)),
+        GoRoute(path: '/register', builder: (context, state) => const RegisterCashierScreen()),
+        GoRoute(path: '/forgot-password', builder: (context, state) => const ForgotPasswordScreen()),
 
         StatefulShellRoute.indexedStack(
           builder: (context, state, navigationShell) {
