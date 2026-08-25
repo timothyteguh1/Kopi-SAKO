@@ -1,7 +1,10 @@
+import 'dart:convert';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:http/http.dart' as http; // IMPORT BARU
 
 class RadarBranch {
   final String id;
@@ -21,15 +24,29 @@ class RadarBranch {
 class RadarState {
   final LatLng? myLocation;
   final List<RadarBranch> activeBranches;
+  final List<LatLng> activeRoute; // TAMBAHAN: Menyimpan garis rute jalan
   final bool isLoading;
   final String? error;
 
-  RadarState({this.myLocation, this.activeBranches = const [], this.isLoading = false, this.error});
+  RadarState({
+    this.myLocation, 
+    this.activeBranches = const [], 
+    this.activeRoute = const [], 
+    this.isLoading = false, 
+    this.error
+  });
 
-  RadarState copyWith({LatLng? myLocation, List<RadarBranch>? activeBranches, bool? isLoading, String? error}) {
+  RadarState copyWith({
+    LatLng? myLocation, 
+    List<RadarBranch>? activeBranches, 
+    List<LatLng>? activeRoute,
+    bool? isLoading, 
+    String? error
+  }) {
     return RadarState(
       myLocation: myLocation ?? this.myLocation,
       activeBranches: activeBranches ?? this.activeBranches,
+      activeRoute: activeRoute ?? this.activeRoute,
       isLoading: isLoading ?? this.isLoading,
       error: error,
     );
@@ -38,14 +55,13 @@ class RadarState {
 
 class RadarNotifier extends StateNotifier<RadarState> {
   RadarNotifier() : super(RadarState()) {
-    _initRealtimeSubscription(); // Aktifkan pendengar live
+    _initRealtimeSubscription(); 
   }
   
   final _supabase = Supabase.instance.client;
   final Distance _distanceCalc = const Distance(); 
   RealtimeChannel? _realtimeChannel;
 
-  // Mendengarkan perubahan tabel branches secara real-time
   void _initRealtimeSubscription() {
     _realtimeChannel = _supabase.channel('public:branches').onPostgresChanges(
       event: PostgresChangeEvent.all, 
@@ -64,7 +80,7 @@ class RadarNotifier extends StateNotifier<RadarState> {
   }
 
   Future<void> scanRadar() async {
-    state = state.copyWith(isLoading: true, error: null);
+    state = state.copyWith(isLoading: true, error: null, activeRoute: []); // Bersihkan rute saat refresh
 
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
@@ -91,7 +107,6 @@ class RadarNotifier extends StateNotifier<RadarState> {
     if (state.myLocation == null) return;
     
     try {
-      // Menggunakan 'whatsapp_number' sesuai dengan skema tabel Supabase Anda[cite: 14]
       final List<dynamic> rawBranches = await _supabase
           .from('branches')
           .select('id, name, address, whatsapp_number, current_latitude, current_longitude') 
@@ -110,7 +125,7 @@ class RadarNotifier extends StateNotifier<RadarState> {
               id: b['id'],
               name: b['name'],
               description: b['address'] ?? 'Kopi SAKO',
-              phone: b['whatsapp_number'] ?? '', // Mengambil data dari whatsapp_number[cite: 14]
+              phone: b['whatsapp_number'] ?? '', 
               location: branchPos,
               distanceInMeters: meter,
               estimatedTimeMinutes: time == 0 ? 1 : time,
@@ -125,6 +140,39 @@ class RadarNotifier extends StateNotifier<RadarState> {
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
     }
+  }
+
+  // ==============================================================
+  // FUNGSI BARU: MENGAMBIL RUTE JALAN DARI OSRM API (GRATIS)
+  // ==============================================================
+  Future<void> getRouteToBranch(LatLng destination) async {
+    if (state.myLocation == null) return;
+
+    try {
+      final start = state.myLocation!;
+      // Panggil OSRM API untuk profil mobil/motor (driving)
+      final url = 'https://router.project-osrm.org/route/v1/driving/${start.longitude},${start.latitude};${destination.longitude},${destination.latitude}?geometries=geojson';
+      
+      final response = await http.get(Uri.parse(url));
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final coords = data['routes'][0]['geometry']['coordinates'] as List;
+        
+        // OSRM mengembalikan [Longitude, Latitude], FlutterMap butuh [Latitude, Longitude]
+        final routePoints = coords.map((c) => LatLng(c[1] as double, c[0] as double)).toList();
+        
+        state = state.copyWith(activeRoute: routePoints);
+      }
+    } catch (e) {
+      // Jika gagal menarik rute, diamkan saja agar tidak mengganggu (fail-safe)
+      print('Gagal menarik rute: $e');
+    }
+  }
+
+  // Menghapus rute saat bottom sheet ditutup
+  void clearRoute() {
+    state = state.copyWith(activeRoute: []);
   }
 }
 

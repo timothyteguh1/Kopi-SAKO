@@ -28,13 +28,38 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
     });
   }
 
+  // ==============================================================
+  // PERBAIKAN UX: RUTE TIDAK DIHAPUS SAAT MENU DITUTUP
+  // ==============================================================
   void _showMenuBottomSheet(BuildContext context, RadarBranch branch) {
+    // 1. Gambar rute ke gerobak yang dipilih
+    ref.read(radarProvider.notifier).getRouteToBranch(branch.location);
+
+    // 2. Geser kamera ke tengah-tengah antara pelanggan dan gerobak (Zoom sedikit menjauh)
+    final myLoc = ref.read(radarProvider).myLocation;
+    if (myLoc != null) {
+      final centerLat = (myLoc.latitude + branch.location.latitude) / 2;
+      final centerLng = (myLoc.longitude + branch.location.longitude) / 2;
+      _mapController.move(LatLng(centerLat, centerLng), 14.5); 
+    }
+
+    // 3. Tampilkan Menu (Kita hapus .whenComplete agar rute & kamera tidak me-reset)
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => BranchMenuSheet(branch: branch), 
     );
+  }
+
+  void _zoomIn() {
+    final currentZoom = _mapController.camera.zoom;
+    _mapController.move(_mapController.camera.center, currentZoom + 1);
+  }
+
+  void _zoomOut() {
+    final currentZoom = _mapController.camera.zoom;
+    _mapController.move(_mapController.camera.center, currentZoom - 1);
   }
 
   @override
@@ -64,13 +89,31 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
             top: 0, left: 0, right: 0, bottom: MediaQuery.of(context).size.height * 0.4,
             child: FlutterMap(
               mapController: _mapController,
-              options: MapOptions(initialCenter: initialMapCenter, initialZoom: 15.5),
+              options: MapOptions(
+                initialCenter: initialMapCenter, 
+                initialZoom: 15.5,
+                interactionOptions: const InteractionOptions(flags: InteractiveFlag.all), 
+              ),
               children: [
                 TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'),
+                
+                PolylineLayer(
+                  polylines: [
+                    if (radarState.activeRoute.isNotEmpty)
+                      Polyline(
+                        points: radarState.activeRoute,
+                        strokeWidth: 4.5,
+                        color: Colors.blue.withOpacity(0.8), 
+                        borderStrokeWidth: 2.0,
+                        borderColor: Colors.blue.shade900,
+                      ),
+                  ],
+                ),
                 MarkerLayer(markers: mapMarkers),
               ],
             ),
           ),
+
           SafeArea(
             child: Align(
               alignment: Alignment.topCenter,
@@ -100,6 +143,60 @@ class _RadarScreenState extends ConsumerState<RadarScreen> {
               ),
             ),
           ),
+
+          // ==============================================================
+          // TAMBAHAN: TOMBOL "TUTUP RUTE" MUNCUL JIKA ADA RUTE AKTIF
+          // ==============================================================
+          if (radarState.activeRoute.isNotEmpty)
+            Positioned(
+              top: 100, // Tampil pas di bawah banner lokasi
+              left: 0,
+              right: 0,
+              child: Center(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red.shade400,
+                    foregroundColor: Colors.white,
+                    elevation: 4,
+                    shape: const StadiumBorder(),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  ),
+                  icon: const Icon(Icons.close, size: 18),
+                  label: const Text('Tutup Rute', style: TextStyle(fontWeight: FontWeight.bold)),
+                  onPressed: () {
+                    // 1. Bersihkan garis biru
+                    ref.read(radarProvider.notifier).clearRoute();
+                    // 2. Kembalikan kamera fokus ke user
+                    if (radarState.myLocation != null) {
+                      _mapController.move(radarState.myLocation!, 15.5);
+                    }
+                  },
+                ),
+              ),
+            ),
+
+          Positioned(
+            right: 16,
+            bottom: (MediaQuery.of(context).size.height * 0.45) + 16, 
+            child: Column(
+              children: [
+                FloatingActionButton.small(
+                  heroTag: 'btn_zoom_in',
+                  backgroundColor: Colors.white,
+                  onPressed: _zoomIn,
+                  child: const Icon(Icons.add, color: Colors.black87),
+                ),
+                const SizedBox(height: 8),
+                FloatingActionButton.small(
+                  heroTag: 'btn_zoom_out',
+                  backgroundColor: Colors.white,
+                  onPressed: _zoomOut,
+                  child: const Icon(Icons.remove, color: Colors.black87),
+                ),
+              ],
+            ),
+          ),
+
           DraggableScrollableSheet(
             initialChildSize: 0.45, minChildSize: 0.45, maxChildSize: 0.9,
             builder: (context, scrollController) {
